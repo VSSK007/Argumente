@@ -31,7 +31,7 @@ Plus **Solo Spar**. Someone arriving alone gets value immediately, and it also d
 **Must-have (demo fails without these)**
 - M1 Auth (magic link plus dev login), user, Delegate creation with position cards
 - M2 Memory Inspector (list, edit, retract positions)
-- M3 Chamber create from 3 templates, invite link, join-with-Delegate
+- M3 Chamber create from 3 templates, invite link, guest join (Delegate optional, offered afterwards; D19)
 - M4 Private intake: human write, or Delegate draft then endorse
 - M5 Engine: decompose → typed nodes, assumptions, crux candidates
 - M6 Restatement Gate (accept/reject with feedback → regenerate, max 3 revisions)
@@ -50,7 +50,7 @@ Plus **Solo Spar**. Someone arriving alone gets value immediately, and it also d
 - S5 Deploy to a public URL
 
 **Could-have**
-- C1 Delegate pre-round (2 turns each, all INFERRED, owner review)
+- C1 Delegate pre-round (2 turns each, all INFERRED, owner review). Only if the core loop is solid by H48 (D23).
 - C2 Public Delegate profile
 - C3 Interpretation Diff view
 - C4 Commons index page

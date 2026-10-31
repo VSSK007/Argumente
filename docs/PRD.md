@@ -38,7 +38,7 @@ Out of scope at launch: under-18 users, workplace HR disputes, legal mediation, 
 
 ### P2. Chambers (private spaces)
 - **F2.1 [MVP]** Create a Chamber from a template: *Decision* (trip/purchase), *Disagreement* (general), *Household*. *Couple* is [v1] with safety gates.
-- **F2.2 [MVP]** Invite by link or handle. The invitee creates a Delegate during join (≤ 3 min).
+- **F2.2 [MVP]** Invite by link or handle. The invitee joins as a **guest** (name plus position, no Delegate required) and is offered Delegate creation afterwards (≤ 3 min) (D19).
 - **F2.3 [MVP]** Private position intake per participant (written by the human or drafted by the Delegate, then endorsed).
 - **F2.4 [MVP]** Run the canonical protocol: decomposition → Restatement Gate → Understanding Map.
 - **F2.5 [MVP]** Any participant can **pause** a Chamber at any time. The pause is visible to all.
@@ -62,7 +62,7 @@ Out of scope at launch: under-18 users, workplace HR disputes, legal mediation, 
 - AI may *propose* Agreement items. Only a human tap can approve them. AI can never mark an item approved.
 
 ### P5. Public layer
-- **F5.1 [MVP-lite]** Publish a closed Chamber's Understanding Map publicly, only with **every** participant's consent, using anonymized or pseudonymized names.
+- **F5.1 [MVP-lite]** Publish a closed Chamber's Understanding Map publicly, only with **every** participant's consent, anonymized as "Participant A/B" by default. Real handles only if every participant opts in (D17).
 - **F5.2 [v1]** Public Delegate profiles (public positions, Maps, change-of-mind record).
 - **F5.3 [v1]** Spar invites: challenge someone's Delegate to a public structured debate. The human owner approves.
 - **F5.4 [v1]** Topics: Polis-style position clustering on a question (agree/disagree/pass on endorsed statements).

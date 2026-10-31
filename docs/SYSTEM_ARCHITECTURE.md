@@ -16,7 +16,7 @@ There are two horizons: an **MVP architecture** that can be built in 72 hours, a
 | Realtime | WebSockets | **Modify → SSE for MVP** | Clients mostly *receive* streamed engine output and state changes. SSE through FastAPI is simpler and works over plain HTTP. Writes go over REST. Move to WS when there's live co-presence typing. |
 | Workers | Background workers | **Accept** | arq (async, Redis-backed). Engine runs are jobs, never on the request thread. |
 | Orchestration | LangGraph | **Defer** | The Chamber protocol is a **deterministic state machine** owned by our code. LangGraph adds a dependency and hides the state we need to audit. Use plain Python state machines plus a thin LLM client. Revisit for long-running agent loops in v1. |
-| Models | Gemini / Claude / OpenAI / OSS | **Router** | A `ModelRouter` with task classes: `extract` (fast, cheap), `analyze` (strong reasoning), `critic` (a *different family* from analyze, which reduces correlated errors), `moderate`, `embed`. Configured by env. Start with one provider plus one alternative for critic. |
+| Models | Gemini / Claude / OpenAI / OSS | **Router** | A `ModelRouter` with task classes: `extract` (fast, cheap), `analyze` (strong reasoning), `critic` (a *different family* from analyze, which reduces correlated errors), `moderate`, `embed`. Configured by env. **Decided (D16):** `extract` = `claude-haiku-5-5`, `analyze` = `claude-sonnet-5-5` (`render_map` may move to `claude-opus-5-5` if evals justify it), `critic` = a Gemini or OpenAI model. |
 | Structured gen | — | **Required** | Every engine call returns JSON validated by Pydantic, with retry-on-invalid (max 2). |
 | Auth | — | **Auth.js (NextAuth) email magic link → FastAPI JWT** | Or Clerk/Supabase Auth to save time. MVP: magic link plus a dev-login bypass behind a flag. |
 
@@ -195,7 +195,8 @@ Idempotency: each run has `run_id` and an input hash, so retries never duplicate
 
 ## 9. Deployment architecture
 
-- **MVP:** Vercel (Next.js) + Fly.io or Render (FastAPI API + worker as two processes) + managed Postgres (Neon or Supabase, with pgvector) + Upstash Redis. Docker Compose for local dev. **[ASSUMPTION]** The founder has accounts or can create them. Otherwise the MVP demo runs fully in Docker Compose.
+- **Decided (D15):** Docker Compose locally during the 72h build, then free tiers. No paid infrastructure before real usage.
+- **MVP hosted:** Vercel (Next.js) + Fly.io or Render (FastAPI API + worker as two processes) + managed Postgres (Neon or Supabase, with pgvector) + Upstash Redis. Docker Compose for local dev. **[ASSUMPTION]** The founder has accounts or can create them. Otherwise the MVP demo runs fully in Docker Compose.
 - **v1:** Containerized services on a single cloud (GCP Cloud Run or AWS ECS), Postgres with read replicas, separate worker pools per model class, Redis cluster, object storage for exports, and a WAF.
 - Secrets live in platform secret stores. Model keys are only on the API and worker, never on the frontend.
 

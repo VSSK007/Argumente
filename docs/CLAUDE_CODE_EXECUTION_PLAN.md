@@ -1,5 +1,16 @@
 # Claude Code Cloud Execution Plan
 
+## 0. Accepted decisions (2026-10-31; full log in OPEN_QUESTIONS.md §1)
+
+Every session must respect these:
+- Launch focus: small-group decisions and disagreements. No couple template (D5, D6).
+- Names: **Delegate** / **Mediator** / `.d` handles (D14).
+- Guests can join without a Delegate (D19). Autonomy is L0/L1 only (D20). One Delegate per human, 18+ (D11, D12).
+- Models: Haiku 5.5 for extract, Sonnet 5.5 for analyze, a non-Anthropic critic (D16).
+- Hosting: local Compose, then free tiers only (D15).
+- Published Maps are anonymized by default (D17). Retention is 90 days after close (D21).
+- Restate each party to the group once (D22). Pre-round only if on track at H48 (D23). No expenses in the MVP (D24).
+
 ## 1. Credit budgeting principles
 
 - **[ASSUMPTION]** Credit consumption scales with tokens processed (context size × turns) and model choice, not with the number of sessions. "93 credits" isn't 93 sessions or N hours. **Measure early:** check the balance after T0 and recalibrate.
@@ -96,7 +107,7 @@ Each block below is a **ready-to-paste prompt** for a Claude Code Cloud session.
 4. SQLAlchemy 2 models plus an Alembic migration for every table in §4, including `epistemic_status`, `scope_type/scope_id`, and `chamber_events`.
 5. Export the OpenAPI to `packages/contracts/openapi.json`. Generate TS types with `openapi-typescript` into `packages/contracts/ts/`. Add a `make contracts` script.
 6. Next.js 16 (App Router, React 19, Tailwind 4) shell: the tokens from the UX spec §7, fonts via `next/font`, the 4-tab mobile nav and desktop rail, and placeholder routes for all screens. A typed API client in `apps/web/lib/api/` with a `NEXT_PUBLIC_API_MODE=stub|live` switch.
-7. `CLAUDE.md`: repo map, commands, and the **Invariants** list (§6).
+7. `CLAUDE.md`: repo map, commands, the **Invariants** list (§6), and the **Accepted decisions** summary (§0).
 8. CI workflow (GitHub Actions) as in §4.
 
 **Acceptance:** `docker compose up` → API `/docs` lists every endpoint. `/chambers/{id}/stream` streams fixture events. Web shows the shell at `localhost:3000`. CI passes. Contract committed.
@@ -115,6 +126,7 @@ Each block below is a **ready-to-paste prompt** for a Claude Code Cloud session.
 
 **Build:**
 - Magic-link auth (log the link to the console in dev) plus `DEV_LOGIN=1` bypass. JWT sessions with an `actor_type` claim (`human` for interactive sessions, `service` for workers).
+- **Guest participants** (D19): `memberships.delegate_id` nullable. A guest submits positions as a human, then is offered Delegate creation. Autonomy limited to L0/L1 (D20). Chamber retention job: purge 90 days after close unless extended (D21).
 - Delegate CRUD. Unique `.d` handles. A position-cards catalog (seed 3 templates × 8 cards in a YAML file).
 - Positions CRUD with scope. Postgres **RLS** policies on `positions`, `nodes`, `episodes`. A `scoped_positions(delegate_id, context)` repository function, which is the *only* retrieval path.
 - Chambers: templates, invites (tokenized), membership, and a **protocol state machine** (`Framing → Intake → Decomposition → Restatement → Map → Resolution → Closed`) with server-side gate checks. Engine steps call an `EngineGateway` **interface** (with a stub implementation) that T5 will wire up.
@@ -138,7 +150,7 @@ Each block below is a **ready-to-paste prompt** for a Claude Code Cloud session.
 **Read:** ARGUMENTATIVE_INTELLIGENCE.md (all), PERSONA_ARCHITECTURE §2.
 
 **Build:**
-- `ModelRouter` with task classes `extract|analyze|critic|moderate|embed`. Providers via env vars (Anthropic, OpenAI, Google adapters; at least one fully implemented plus `FakeProvider` with recorded fixtures).
+- `ModelRouter` with task classes `extract|analyze|critic|moderate|embed`. Providers via env vars (Anthropic, OpenAI, Google adapters plus `FakeProvider` with recorded fixtures). **Defaults (D16):** `extract`=`claude-haiku-5-5`, `analyze`=`claude-sonnet-5-5`, `critic`=Gemini or OpenAI via `CRITIC_PROVIDER`/`CRITIC_MODEL` env. Implement the Anthropic adapter plus one critic adapter fully. For groups of >2, `restate` produces one restatement per party addressed to the whole group (D22).
 - Operations (each a function taking typed input and returning typed output, validated, with retry-on-invalid ×2):
   `decompose(positions) -> Graph(nodes, edges, cruxes)`, `restate(party_positions, audience) -> Restatement`, `revise_restatement(prev, feedback)`, `render_map(graph, restatements) -> UnderstandingMap`, `spar_turn(claim, history, mode, methodology) -> SparTurn`, `robustness_report(history)`, `draft_position(delegate_profile, endorsed_positions, chamber_topic) -> Draft(INFERRED)`, `critic(output, sources) -> CriticReport(fidelity_violations, balance)`.
 - **Fabrication guard:** every human-attributed sentence in a Map or restatement carries `source_node_ids`. A post-check rejects outputs that cite non-endorsed nodes.
@@ -209,7 +221,7 @@ Each block below is a **ready-to-paste prompt** for a Claude Code Cloud session.
 **Depends on:** T1 (merged). Coordinates with T5 on hook points (`safety.check_input`, `safety.check_output`).
 **Read:** TRUST_AND_SAFETY.md (all).
 
-**Build:** input/output moderation (provider endpoint plus a rules layer: impersonation grammar, out-of-scope position leakage, personal attacks). `safety_flags` with private-to-user visibility. Report endpoint. Audit log for admin reads. Rate limits (invites, engine runs per user per hour). An 18+ attestation at signup. Deploy: Vercel (web) plus Fly or Render (api and worker) plus Neon/Supabase Postgres plus Upstash Redis, *or* a documented single-VM Compose deploy if accounts aren't available. **Ask the founder which, via the handoff, before provisioning anything that costs money.**
+**Build:** input/output moderation (provider endpoint plus a rules layer: impersonation grammar, out-of-scope position leakage, personal attacks). `safety_flags` with private-to-user visibility. Report endpoint. Audit log for admin reads. Rate limits (invites, engine runs per user per hour). An 18+ attestation at signup. Deploy (D15): free tiers only. Vercel (web), Render or Fly (api and worker), Neon (Postgres plus pgvector), Upstash (Redis). Fallback: a documented single-VM Compose deploy. **Never provision anything paid. If an account or key is missing, write the runbook and stop.** Publications are anonymized by default (D17): enforce in the publish renderer.
 
 **Tests:** prompt-injection suite (10 adversarial participant messages trying to extract another Chamber's positions → 0 leaks). Impersonation output test. AC3/AC5/AC8 re-verified end-to-end.
 **Deliverables:** PR, `docs/handoff/T6.md`, a deployed URL or deploy runbook.
