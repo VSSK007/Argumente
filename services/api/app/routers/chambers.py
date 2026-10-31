@@ -1,17 +1,21 @@
+import asyncio
+import json
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import protocol, safety
+from .. import protocol, retention, safety
 from ..auth import current_user, human_user
 from ..cards import TEMPLATES
-from ..db import get_db, now
+from ..db import SessionLocal, get_db, now
 from ..engine import get_engine
 from ..models import (
     AgreementItem,
+    AuthSession,
     Approval,
     Chamber,
     ChamberEvent,
@@ -116,6 +120,10 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
 
     return {
         "preround": preround_view(db, ch, me, mems),
+        "retention": {
+            "retain_until": retention._aware(ch.retain_until).isoformat() if ch.retain_until else None,
+            "purged": ch.purged_at is not None,
+        },
         "id": ch.id,
         "title": ch.title,
         "question": ch.question,
@@ -318,6 +326,51 @@ def list_chambers(user: User = Depends(current_user), db: Session = Depends(get_
 def get_chamber(cid: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     ch, _ = _chamber_for_member(cid, user, db)
     return chamber_view(ch, user, db)
+
+
+@router.get("/chambers/{cid}/stream")
+async def stream(cid: str, request: Request, token: str):
+    """Server-sent events: a 'change' event whenever anything in the Chamber changes.
+
+    Carries no content (only event ids and types); clients refetch the authorized view.
+    EventSource can't set headers, so the session token comes as a query parameter (local dev).
+    """
+    with SessionLocal() as db:
+        sess = db.get(AuthSession, token)
+        if not sess or not db.scalar(select(Membership).where(Membership.chamber_id == cid, Membership.user_id == sess.user_id)):
+            err(403, "NOT_A_MEMBER", "You're not part of this Chamber.")
+
+    def snapshot(db) -> tuple[int, tuple]:
+        last = db.scalar(select(ChamberEvent.id).where(ChamberEvent.chamber_id == cid).order_by(ChamberEvent.id.desc())) or 0
+        run = db.scalars(select(EngineRun).where(EngineRun.chamber_id == cid).order_by(EngineRun.created_at.desc())).first()
+        return last, (run.id, run.status, run.step) if run else ()
+
+    async def events():
+        with SessionLocal() as db:
+            last, run_sig = snapshot(db)
+        yield "retry: 3000\nevent: hello\ndata: {}\n\n"
+        idle = 0.0
+        while not await request.is_disconnected():
+            await asyncio.sleep(0.5)
+            idle += 0.5
+            with SessionLocal() as db:
+                rows = db.execute(
+                    select(ChamberEvent.id, ChamberEvent.type).where(ChamberEvent.chamber_id == cid, ChamberEvent.id > last).order_by(ChamberEvent.id)
+                ).all()
+                _, new_run_sig = snapshot(db)
+            for eid, etype in rows:
+                last = eid
+                yield f"event: change\ndata: {json.dumps({'id': eid, 'type': etype})}\n\n"
+                idle = 0.0
+            if new_run_sig != run_sig:
+                run_sig = new_run_sig
+                yield f"event: change\ndata: {json.dumps({'type': 'engine.progress'})}\n\n"
+                idle = 0.0
+            if idle >= 15:
+                yield ": ping\n\n"
+                idle = 0.0
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
 
 
 @router.get("/invites/{token}")
@@ -576,8 +629,22 @@ def _close(db: Session, ch: Chamber, closed_state: str, user: User | None):
     ch.state = "CLOSED"
     ch.closed_state = closed_state
     ch.closed_at = now()
+    ch.retain_until = retention.default_retain_until()
     protocol.emit(db, ch.id, "chamber.closed", "human" if user else "system", user.id if user else None, closed_state=closed_state)
     db.commit()
+    if closed_state != "ABANDONED":
+        protocol.start_run(db, ch, "learn")
+
+
+@router.post("/chambers/{cid}/retention/extend")
+def extend_retention(cid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    ch, _ = _chamber_for_member(cid, user, db)
+    if ch.state != "CLOSED" or ch.purged_at:
+        err(409, "WRONG_STATE", "Only closed Chambers that still have their content can be extended.")
+    ch.retain_until = retention.extended_until(ch.retain_until)
+    protocol.emit(db, ch.id, "retention.extended", "human", user.id)
+    db.commit()
+    return chamber_view(ch, user, db)
 
 
 @router.post("/chambers/{cid}/pause")

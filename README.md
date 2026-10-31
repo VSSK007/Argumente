@@ -47,12 +47,15 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | Safety | Abuse/coercion/self-harm screening → private resources + quiet pause |
 | Publishing | Needs every participant's consent, anonymized by default, revocable → `/commons`, `/m/<slug>` |
 | Spar | Devil's Advocate / Steelman against 5 reasoning methodologies, with a robustness report |
+| Delegate learning | After a Chamber closes, your Delegate suggests up to 3 general positions, each backed by a quote of what you endorsed. Nothing is used until you **Keep** (private or public), edit, or discard it. |
 | Memory Inspector | View, edit (with change-of-mind history), retract, change scope; export JSON; delete account |
+| Live updates | Server-sent events push every change to everyone in the Chamber within about half a second. Polling is the fallback if the stream drops. |
+| Retention (D21) | A closed Chamber's private content (positions, restatements, Map, pre-round) is deleted 90 days after close unless a member extends it. Agreements, the event record, consented published Maps and positions you chose to keep survive. `RETENTION_DAYS` overrides. |
 
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 18 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 20 API tests incl. the safety invariants and the eval gate
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
 node e2e/preround.cjs                      # browser E2E: Delegate pre-round
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
@@ -60,9 +63,6 @@ cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/
 
 ### Mediator evals
 `evals/scenarios/` holds 10 disagreements (trips, couples, chores, rent, family, work, money, definitions). `evals/run.py` scores fabricated or misattributed quotes (target 0), coverage, disagreement-type recall and restatement balance for whichever engine is configured, so you can compare the offline engine against Claude once you add a key. The offline baseline is in [`evals/REPORT.md`](evals/REPORT.md). `tests/test_evals.py` fails the build if the offline engine ever fabricates a quote.
-
-```bash
-```
 
 ## Layout
 
@@ -77,7 +77,7 @@ docs/           Product ideation package (vision, PRD, architecture, safety, roa
 ```
 
 ### Deliberate simplifications vs `docs/SYSTEM_ARCHITECTURE.md`
-SQLite instead of Postgres/pgvector, in-process background threads instead of Redis/arq, 2-second polling instead of SSE, and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `usePoll`, `auth.py`).
+SQLite instead of Postgres/pgvector, in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub (and takes the session token as a query parameter, since `EventSource` can't send headers), and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
 
 ## Product docs
 

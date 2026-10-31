@@ -103,6 +103,15 @@ class ReplyOut(BaseModel):
     unknowns: list[str] = Field(description="Points from others the owner has never taken a position on.")
 
 
+class CandidatePosition(BaseModel):
+    statement: str = Field(description="A general, reusable position, faithful to the person's words.")
+    quote: str = Field(description="The exact words from their text that support it, copied verbatim.")
+
+
+class CandidatesOut(BaseModel):
+    candidates: list[CandidatePosition]
+
+
 # ---------- spar ----------
 class SparTurnOut(BaseModel):
     challenge: str

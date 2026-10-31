@@ -70,6 +70,7 @@ async function login(page, name, next = "") {
 
   // --- Restatement gate
   await alice.getByText("Is this what you mean?").waitFor({ timeout: 20000 });
+  await alice.getByText("live", { exact: false }).first().waitFor({ timeout: 10000 });
   await shot(alice, "04-restatement-gate");
   await bob.reload();
   await bob.getByRole("button", { name: "Not quite" }).click();
@@ -87,8 +88,8 @@ async function login(page, name, next = "") {
   await alice.getByPlaceholder(/Propose an item/).fill("Porto, 4 nights, max €500 each, one slow day in the middle");
   await alice.getByRole("button", { name: "Propose item" }).click();
   await alice.getByRole("button", { name: "Approve" }).click();
-  await bob.reload();
-  await bob.getByRole("button", { name: "Approve" }).click();
+  // Bob's open page receives Alice's proposed item live, with no reload
+  await bob.getByRole("button", { name: "Approve" }).click({ timeout: 10000 });
   await bob.getByText("Agreed, and approved by everyone.").waitFor({ timeout: 10000 });
   await shot(bob, "06-agreed-mobile");
 
@@ -115,6 +116,12 @@ async function login(page, name, next = "") {
   await alice.getByRole("button", { name: /Finish/ }).click();
   await alice.getByText("Robustness report").waitFor();
   await shot(alice, "08-spar-report");
+
+  // --- After closing, Alice's Delegate suggests what it learned; nothing is kept until she says so
+  await alice.goto(`${BASE}/me`);
+  await alice.getByText(/Learned \d+ thing/).waitFor({ timeout: 15000 });
+  await shot(alice, "09a-learned-review");
+  await alice.getByRole("button", { name: "Keep", exact: true }).first().click();
 
   // --- Memory Inspector shows the Chamber-scoped position
   await alice.goto(`${BASE}/me`);

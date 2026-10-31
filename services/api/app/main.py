@@ -1,14 +1,18 @@
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import Base, engine
+from . import retention
+from .db import ensure_schema
 from .routers import auth, chambers, delegates, public, spar
 
 logging.basicConfig(level=logging.INFO)
 
-Base.metadata.create_all(engine)
+ensure_schema()
+if os.environ.get("ENGINE_SYNC") != "1":
+    retention.start_worker()
 
 app = FastAPI(title="Argumenté API", version="0.1.0", description="Local MVP. See docs/SYSTEM_ARCHITECTURE.md.")
 app.add_middleware(

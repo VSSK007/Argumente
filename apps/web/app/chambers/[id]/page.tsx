@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
-import { api, usePoll } from "@/lib/api";
+import { useRef, useState } from "react";
+import { api, useChamberStream, usePoll } from "@/lib/api";
 import {
   Button,
   Card,
@@ -33,7 +33,11 @@ type Member = {
 
 export default function ChamberPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: ch, setData, error: loadError } = usePoll<any>(`/chambers/${id}`, 2000);
+  const reloadRef = useRef<() => void>(() => {});
+  const live = useChamberStream(id, () => reloadRef.current());
+  // With a live stream, polling is only a slow safety net.
+  const { data: ch, setData, error: loadError, reload } = usePoll<any>(`/chambers/${id}`, live ? 20000 : 2000);
+  reloadRef.current = reload;
   const [error, setError] = useState<string | null>(null);
 
   async function act(path: string, body: unknown = {}) {
@@ -78,7 +82,12 @@ export default function ChamberPage() {
             )
           ) : null}
         </div>
-        <StateRail state={ch.state} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <StateRail state={ch.state} />
+          <span className="label-mono text-ink-2" title={live ? "Updates appear instantly" : "Refreshing every few seconds"}>
+            <span className={live ? "text-agree" : ""}>●</span> {live ? "live" : "syncing"}
+          </span>
+        </div>
         <Members members={ch.members} state={ch.state} />
       </header>
 
@@ -153,21 +162,23 @@ export default function ChamberPage() {
             </Card>
           ) : null}
           {ch.state === "RESOLUTION" ? <Resolution ch={ch} act={act} /> : null}
-          {ch.state === "CLOSED" ? (
-            <Card className="mx-auto max-w-[720px]">
-              <div className="label-mono text-ink-2">Closed</div>
-              <p className="font-display text-2xl">
-                {ch.closed_state === "AGREED"
-                  ? "Agreed, and approved by everyone."
-                  : ch.closed_state === "UNDERSTOOD"
-                    ? "Understood each other. Still disagree, and that’s allowed."
-                    : "Abandoned."}
-              </p>
-              {ch.agreement.items.length ? <AgreementList ch={ch} act={act} readOnly /> : null}
-            </Card>
-          ) : null}
           <Publish ch={ch} act={act} />
         </>
+      ) : null}
+
+      {ch.state === "CLOSED" ? (
+        <Card className="mx-auto max-w-[720px]">
+          <div className="label-mono text-ink-2">Closed</div>
+          <p className="font-display text-2xl">
+            {ch.closed_state === "AGREED"
+              ? "Agreed, and approved by everyone."
+              : ch.closed_state === "UNDERSTOOD"
+                ? "Understood each other. Still disagree, and that’s allowed."
+                : "Abandoned."}
+          </p>
+          {ch.agreement.items.length ? <AgreementList ch={ch} act={act} readOnly /> : null}
+          <Retention ch={ch} act={act} />
+        </Card>
       ) : null}
 
       {ch.state === "INTAKE" && ch.is_creator ? (
@@ -736,6 +747,30 @@ function AgreementList({ ch, act, readOnly }: { ch: any; act: (p: string, b?: un
   );
 }
 
+/* ================================================================= retention */
+
+function Retention({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  const r = ch.retention;
+  if (!r?.retain_until) return null;
+  return (
+    <div className="mt-4 border-t hairline pt-3 text-sm text-ink-2">
+      {r.purged ? (
+        <p>The private content of this Chamber has been deleted under the retention policy. Agreements and the record are kept.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <span>
+            Positions, restatements and the Map will be deleted on <strong className="text-ink">{new Date(r.retain_until).toLocaleDateString()}</strong>.
+            Agreements and the record are kept.
+          </span>
+          <Button variant="ghost" onClick={() => act(`/chambers/${ch.id}/retention/extend`)}>
+            Keep 90 more days
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ================================================================= publish */
 
 function Publish({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
@@ -838,6 +873,8 @@ const EVENT_LABEL: Record<string, string> = {
   "publication.consent.granted": "consented to publish",
   "publication.consent.revoked": "withdrew publishing consent",
   "publication.published": "Map published",
+  "retention.extended": "extended how long this Chamber is kept",
+  "chamber.purged": "Private content deleted (retention)",
   "preround.started": "started a Delegate pre-round",
   "preround.openings.drafted": "Delegates drafted openings",
   "preround.replies.drafted": "Delegates drafted replies",

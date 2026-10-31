@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, setToken, usePoll, useMe } from "@/lib/api";
 import { Button, Card, DelegateBadge, EpistemicTag, ErrorNote, SectionTitle, TextArea } from "@/components/ui";
+import { LearnedReview } from "@/components/LearnedReview";
 
 export default function Me() {
   const router = useRouter();
@@ -83,6 +84,8 @@ export default function Me() {
       ) : (
         <ErrorNote error={dErr?.message ?? null} />
       )}
+
+      {me.has_delegate ? <LearnedReview onChange={reload} /> : null}
 
       {me.has_delegate ? (
         <section>

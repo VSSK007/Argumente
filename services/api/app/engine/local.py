@@ -19,6 +19,8 @@ from .types import (
     OptionsOut,
     Party,
     PartyNote,
+    CandidatePosition,
+    CandidatesOut,
     ReplyOut,
     RestatementOut,
     SparReport,
@@ -414,6 +416,26 @@ class LocalEngine:
                     views.append(f"{owner_name} has endorsed \u201c{st}\u201d")
             parts.append(f"On {o.label}'s view (\u201c{first}\u201d): " + "; and ".join(views) + ".")
         return ReplyOut(text=" ".join(parts), unknowns=unknowns)
+
+    def suggest_positions(self, question: str, owner_name: str, text: str, existing: list[str]) -> CandidatesOut:
+        """Verbatim value/policy sentences from what the person endorsed, as candidate general positions."""
+        def core(t: str) -> str:
+            t = re.sub(r"\W+", " ", t.lower()).strip()
+            t = re.sub(r"^(i (don ?t|do not) agree that|i agree that|it depends for me whether|i think( that)?|\w+ holds that)\s+", "", t)
+            return t.split(" why ")[0].strip()
+
+        seen = {core(e) for e in existing}
+        out = []
+        for sent in sentences(text):
+            if classify(sent) not in ("VALUE", "POLICY", "DEFINITION"):
+                continue
+            key = core(sent)
+            if len(sent) < 15 or any(key == k or (len(k) > 20 and (k in key or key in k)) for k in seen):
+                continue
+            out.append(CandidatePosition(statement=_strip_end(sent) + ".", quote=_strip_end(sent)))
+            if len(out) == 3:
+                break
+        return CandidatesOut(candidates=out)
 
     # ---------------- spar ----------------
     def spar_turn(self, claim: str, history: list[dict], mode: str, methodology: str) -> SparTurnOut:

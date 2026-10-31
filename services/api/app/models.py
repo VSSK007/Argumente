@@ -56,7 +56,8 @@ class Position(Base):
     statement: Mapped[str] = mapped_column(Text)
     topic: Mapped[str] = mapped_column(String, default="general")
     stance: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # agree | disagree | depends
-    status: Mapped[str] = mapped_column(String, default="ENDORSED")  # ENDORSED | INFERRED | RETRACTED
+    # ENDORSED | INFERRED | RETRACTED | CANDIDATE (suggested after a Chamber; never used until the owner keeps it)
+    status: Mapped[str] = mapped_column(String, default="ENDORSED")
     scope_type: Mapped[str] = mapped_column(String, default="PRIVATE")  # PUBLIC | PRIVATE | CHAMBER
     scope_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_boundary: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -83,6 +84,9 @@ class Chamber(Base):
     engine_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Retention (D21): private content is deleted after retain_until (default: 90 days after close).
+    retain_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    purged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     memberships: Mapped[list["Membership"]] = relationship(cascade="all, delete-orphan", order_by="Membership.joined_at")
 
 

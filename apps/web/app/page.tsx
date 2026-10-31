@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePoll, useMe } from "@/lib/api";
 import { Card, SectionTitle } from "@/components/ui";
+import { LearnedReview } from "@/components/LearnedReview";
 
 type ChamberRow = {
   id: string;
@@ -58,6 +59,8 @@ export default function Today() {
           </div>
         </section>
       ) : null}
+
+      {me.has_delegate ? <LearnedReview compact /> : null}
 
       <section>
         <SectionTitle kicker="Start">Bring something to the table</SectionTitle>

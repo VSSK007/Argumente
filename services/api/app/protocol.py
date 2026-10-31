@@ -121,6 +121,7 @@ def _execute(run_id: str):
             "options": _run_options,
             "preround_openings": _run_preround_openings,
             "preround_replies": _run_preround_replies,
+            "learn": _run_learn,
         }[run.kind]
         mode = handler(db, run, chamber)
         run.status = "DONE"
@@ -383,6 +384,44 @@ def _run_preround_replies(db: Session, run: EngineRun, chamber: Chamber) -> str:
             )
         )
     emit(db, chamber.id, "preround.replies.drafted", "engine")
+    return mode or "local"
+
+
+def _run_learn(db: Session, run: EngineRun, chamber: Chamber) -> str:
+    """After a Chamber closes, each Delegate suggests general positions to its owner (never auto-kept)."""
+    import re as _re
+
+    engine = get_engine()
+    mode = None
+    for m in members(db, chamber):
+        d = delegate_for(db, m.user_id)
+        it = db.scalar(select(Intake).where(Intake.chamber_id == chamber.id, Intake.user_id == m.user_id, Intake.status == "ENDORSED"))
+        if not d or not it or d.status != "ACTIVE":
+            continue
+        if db.scalar(select(Position).where(Position.delegate_id == d.id, Position.status == "CANDIDATE", Position.scope_id == chamber.id)):
+            continue
+        run.step = f"{d.name} is noting what it learned"
+        db.commit()
+        existing = [p.statement for p in scoped_positions(db, d.id, None)]
+        out, m_mode = engine.suggest_positions(chamber.question, m.user.name, it.text, existing)
+        mode = m_mode if mode is None else combine_modes(mode, m_mode)
+        source_norm = _re.sub(r"\W+", " ", it.text.lower())
+        for c in out.candidates[:3]:
+            # Fabrication guard: every suggestion must be backed by the person's own endorsed words.
+            if _re.sub(r"\W+", " ", c.quote.lower()).strip() not in source_norm:
+                continue
+            db.add(
+                Position(
+                    delegate_id=d.id,
+                    statement=c.statement.strip(),
+                    topic=chamber.title,
+                    status="CANDIDATE",
+                    scope_type="PRIVATE",
+                    scope_id=chamber.id,
+                    source=f"CHAMBER:{chamber.title}",
+                    history=[{"at": now().isoformat(), "event": f"suggested after \u201c{chamber.title}\u201d", "quote": c.quote}],
+                )
+            )
     return mode or "local"
 
 

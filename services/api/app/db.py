@@ -41,3 +41,20 @@ def new_id(prefix: str) -> str:
 
 def now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def ensure_schema():
+    """create_all plus additive column migrations, so existing local databases keep working."""
+    from sqlalchemy import inspect, text
+
+    from . import models  # noqa: F401  (register tables)
+
+    Base.metadata.create_all(engine)
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in existing:
+                    coltype = col.type.compile(dialect=engine.dialect)
+                    conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {coltype}'))

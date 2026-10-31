@@ -159,7 +159,7 @@ def patch_my_delegate(body: DelegatePatch, user: User = Depends(human_user), db:
 def list_positions(include_retracted: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
     d = _my_delegate(user, db)
     stmt = select(Position).where(Position.delegate_id == d.id).order_by(Position.created_at.desc())
-    rows = [p for p in db.scalars(stmt) if include_retracted or p.status != "RETRACTED"]
+    rows = [p for p in db.scalars(stmt) if p.status != "CANDIDATE" and (include_retracted or p.status != "RETRACTED")]
     return [position_out(p) for p in rows]
 
 
@@ -230,6 +230,50 @@ def retract_position(pid: str, user: User = Depends(human_user), db: Session = D
     p.history = [*p.history, {"at": now().isoformat(), "event": "retracted by owner"}]
     db.commit()
     return position_out(p)
+
+
+@router.get("/delegates/me/candidates")
+def list_candidates(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Positions the Delegate suggests remembering after a Chamber. Unused until the owner keeps them."""
+    d = db.scalar(select(Delegate).where(Delegate.owner_id == user.id))
+    if not d:
+        return []
+    rows = db.scalars(select(Position).where(Position.delegate_id == d.id, Position.status == "CANDIDATE").order_by(Position.created_at.desc()))
+    return [{**position_out(p), "quote": (p.history[-1].get("quote") if p.history else None), "chamber_id": p.scope_id} for p in rows]
+
+
+class KeepIn(BaseModel):
+    statement: str | None = Field(default=None, min_length=3, max_length=800)
+    scope_type: str = Field(default="PRIVATE", pattern="^(PUBLIC|PRIVATE)$")
+
+
+def _own_candidate(pid: str, user: User, db: Session) -> Position:
+    p = _owned_position(pid, user, db)
+    if p.status != "CANDIDATE":
+        raise HTTPException(409, {"code": "NOT_A_SUGGESTION", "message": "This position isn't a pending suggestion."})
+    return p
+
+
+@router.post("/delegates/me/candidates/{pid}/keep")
+def keep_candidate(pid: str, body: KeepIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    p = _own_candidate(pid, user, db)
+    if body.statement and body.statement.strip() != p.statement:
+        p.statement = body.statement.strip()
+    p.status = "ENDORSED"
+    p.scope_type = body.scope_type
+    p.scope_id = None
+    p.source = p.source.replace("CHAMBER:", "LEARNED:")
+    p.history = [*p.history, {"at": now().isoformat(), "event": "kept by owner"}]
+    db.commit()
+    return position_out(p)
+
+
+@router.post("/delegates/me/candidates/{pid}/discard")
+def discard_candidate(pid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    p = _own_candidate(pid, user, db)
+    db.delete(p)
+    db.commit()
+    return {"discarded": True}
 
 
 @router.get("/delegates/{handle}")

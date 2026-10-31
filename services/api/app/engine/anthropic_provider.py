@@ -16,6 +16,7 @@ from .types import (
     MapOut,
     OptionsOut,
     Party,
+    CandidatesOut,
     ReplyOut,
     RestatementOut,
     SparReport,
@@ -174,6 +175,25 @@ Other Delegates' released openings:
 
 Reply to the others' points in under 120 words: where {owner_name}'s endorsed views agree, where they differ, and what you'd need to ask {owner_name}."""
         return self._call(self.fast_model, prompt, ReplyOut, system=system, max_tokens=4000)
+
+    def suggest_positions(self, question: str, owner_name: str, text: str, existing: list[str]) -> CandidatesOut:
+        known = "\n".join(f"- {e}" for e in existing) or "(none)"
+        system = f"""You are the Delegate of {owner_name}. After a discussion, you suggest up to 3 general positions {owner_name}
+might want you to remember for future discussions. {owner_name} decides; nothing is kept without their approval.
+Only suggest positions clearly supported by their own words, and copy the supporting words verbatim into `quote`.
+Skip anything situation-specific, anything already known, and anything sensitive about other people."""
+        prompt = f"""Discussion question: {question}
+
+What {owner_name} endorsed:
+<text>
+{text}
+</text>
+
+Positions you already know:
+{known}
+
+Suggest up to 3 reusable general positions (or none)."""
+        return self._call(self.fast_model, prompt, CandidatesOut, system=system, max_tokens=4000)
 
     def spar_turn(self, claim: str, history: list[dict], mode: str, methodology: str) -> SparTurnOut:
         transcript = "\n".join(f'{t["role"].upper()}: {t["text"]}' for t in history)

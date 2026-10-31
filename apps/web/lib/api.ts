@@ -102,3 +102,29 @@ export function usePoll<T>(path: string | null, ms = 2000) {
   }, [load, ms]);
   return { data, setData, error, reload: load };
 }
+
+/** Live updates over server-sent events. Calls onChange (debounced) whenever the Chamber changes.
+ *  Returns whether the stream is connected, so callers can slow their polling fallback. */
+export function useChamberStream(id: string | null, onChange: () => void) {
+  const [live, setLive] = useState(false);
+  const cb = useRef(onChange);
+  cb.current = onChange;
+  useEffect(() => {
+    const token = getToken();
+    if (!id || !token || typeof EventSource === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const es = new EventSource(`/api/v1/chambers/${id}/stream?token=${encodeURIComponent(token)}`);
+    es.addEventListener("hello", () => setLive(true));
+    es.addEventListener("change", () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => cb.current(), 120);
+    });
+    es.onerror = () => setLive(false); // EventSource reconnects by itself
+    return () => {
+      if (timer) clearTimeout(timer);
+      es.close();
+      setLive(false);
+    };
+  }, [id]);
+  return live;
+}
