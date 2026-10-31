@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
+services/api/*.db
+services/api/*.db-*
+services/api/.env
+# Node
+node_modules/
+.next/
+apps/web/next-env.d.ts
+*.tsbuildinfo
+# Local
+e2e/screenshots/
