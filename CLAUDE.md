@@ -12,5 +12,5 @@
 6. Pause blocks all actions and cancels in-flight engine runs.
 7. No model keys in the web app. Tests use `ENGINE_PROVIDER=local`.
 8. Retention purges a closed Chamber's private content; never purge agreements, consented publications, or positions the owner kept.
-10. Never put session tokens in URLs. Streams use short-lived scoped tickets (`auth.make_ticket`). New endpoints that call the Mediator must call `ratelimit.check(user.id, "engine")`.
 9. Schema changes must be additive (new tables/nullable columns) so `db.ensure_schema()` can upgrade existing local databases.
+10. Never put session tokens in URLs. Streams use short-lived scoped tickets (`auth.make_ticket`). New endpoints that call the Mediator must call `ratelimit.check(user.id, "engine")`.
