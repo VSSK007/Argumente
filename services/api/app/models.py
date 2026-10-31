@@ -87,6 +87,7 @@ class Chamber(Base):
     # Retention (D21): private content is deleted after retain_until (default: 90 days after close).
     retain_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     purged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    parent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # set when this Chamber revisits another
     memberships: Mapped[list["Membership"]] = relationship(cascade="all, delete-orphan", order_by="Membership.joined_at")
 
 
@@ -171,6 +172,8 @@ class AgreementItem(Base):
     text: Mapped[str] = mapped_column(Text)
     proposed_by_type: Mapped[str] = mapped_column(String)  # human | engine
     proposed_by_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # "agreement" (RESOLUTION) or "understanding" (an agree-to-disagree record after closing as understood)
+    kind: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="agreement")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

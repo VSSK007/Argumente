@@ -104,25 +104,55 @@ export function usePoll<T>(path: string | null, ms = 2000) {
 }
 
 /** Live updates over server-sent events. Calls onChange (debounced) whenever the Chamber changes.
- *  Returns whether the stream is connected, so callers can slow their polling fallback. */
+ *  Authenticates with a 60-second ticket (never the session token in a URL) and reconnects with a
+ *  fresh ticket on errors. Returns whether the stream is connected, so callers can slow polling. */
 export function useChamberStream(id: string | null, onChange: () => void) {
   const [live, setLive] = useState(false);
   const cb = useRef(onChange);
   cb.current = onChange;
   useEffect(() => {
-    const token = getToken();
-    if (!id || !token || typeof EventSource === "undefined") return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const es = new EventSource(`/api/v1/chambers/${id}/stream?token=${encodeURIComponent(token)}`);
-    es.addEventListener("hello", () => setLive(true));
-    es.addEventListener("change", () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => cb.current(), 120);
-    });
-    es.onerror = () => setLive(false); // EventSource reconnects by itself
+    if (!id || !getToken() || typeof EventSource === "undefined") return;
+    let es: EventSource | null = null;
+    let closed = false;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let backoff = 1000;
+
+    async function connect() {
+      if (closed) return;
+      try {
+        const { ticket } = await api<{ ticket: string }>(`/chambers/${id}/stream-ticket`, { body: {} });
+        if (closed) return;
+        es = new EventSource(`/api/v1/chambers/${id}/stream?ticket=${encodeURIComponent(ticket)}`);
+        es.addEventListener("hello", () => {
+          setLive(true);
+          backoff = 1000;
+        });
+        es.addEventListener("change", () => {
+          if (debounce) clearTimeout(debounce);
+          debounce = setTimeout(() => cb.current(), 120);
+        });
+        es.onerror = () => {
+          setLive(false);
+          es?.close(); // the ticket may have expired: reconnect with a new one
+          schedule();
+        };
+      } catch {
+        setLive(false);
+        schedule();
+      }
+    }
+    function schedule() {
+      if (closed) return;
+      retry = setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, 15000);
+    }
+    connect();
     return () => {
-      if (timer) clearTimeout(timer);
-      es.close();
+      closed = true;
+      if (debounce) clearTimeout(debounce);
+      if (retry) clearTimeout(retry);
+      es?.close();
       setLive(false);
     };
   }, [id]);

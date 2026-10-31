@@ -5,7 +5,12 @@ Login is email + name with no password (DEV mode). Production would use magic li
 human sessions can endorse, approve or consent (invariant 1).
 """
 
+import base64
+import hashlib
+import hmac
+import os
 import secrets
+import time
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -49,3 +54,27 @@ def human_user(authorization: str | None = Header(default=None), db: Session = D
     if not user:
         raise HTTPException(401, {"code": "UNAUTHENTICATED", "message": "Unknown user."})
     return user
+
+
+# Short-lived, scope-bound tickets for EventSource connections (which can't send headers),
+# so long-lived session tokens never appear in URLs or logs.
+_SECRET = (os.environ.get("ARGUMENTE_SECRET") or secrets.token_hex(32)).encode()
+
+
+def make_ticket(user_id: str, scope: str, ttl: int = 60) -> str:
+    payload = f"{user_id}|{scope}|{int(time.time()) + ttl}"
+    sig = hmac.new(_SECRET, payload.encode(), hashlib.sha256).hexdigest()[:32]
+    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=") + "." + sig
+
+
+def read_ticket(ticket: str, scope: str) -> str | None:
+    try:
+        b64, sig = ticket.rsplit(".", 1)
+        payload = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4)).decode()
+        user_id, t_scope, exp = payload.split("|")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    expected = hmac.new(_SECRET, payload.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected) or t_scope != scope or int(exp) < time.time():
+        return None
+    return user_id

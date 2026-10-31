@@ -8,14 +8,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import protocol, retention, safety
-from ..auth import current_user, human_user
+from .. import protocol, ratelimit, retention, safety
+from ..auth import current_user, human_user, make_ticket, read_ticket
 from ..cards import TEMPLATES
 from ..db import SessionLocal, get_db, now
 from ..engine import get_engine
 from ..models import (
     AgreementItem,
-    AuthSession,
     Approval,
     Chamber,
     ChamberEvent,
@@ -103,6 +102,8 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
         approvals.setdefault(a.item_id, {})[a.user_id] = a.decision
     member_ids = [m.user_id for m in mems]
 
+    agreement_items = [i for i in items if (i.kind or "agreement") == "agreement"]
+
     def item_status(iid):
         ds = approvals.get(iid, {})
         if any(v == "reject" for v in ds.values()):
@@ -120,6 +121,7 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
 
     return {
         "preround": preround_view(db, ch, me, mems),
+        "lineage": lineage_view(db, ch, me),
         "retention": {
             "retain_until": retention._aware(ch.retain_until).isoformat() if ch.retain_until else None,
             "purged": ch.purged_at is not None,
@@ -192,10 +194,11 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
                     "decisions": approvals.get(i.id, {}),
                     "my_decision": approvals.get(i.id, {}).get(me.id),
                     "status": item_status(i.id),
+                    "kind": i.kind or "agreement",
                 }
                 for i in items
             ],
-            "all_approved": bool(items) and all(item_status(i.id) == "APPROVED" for i in items),
+            "all_approved": bool(agreement_items) and all(item_status(i.id) == "APPROVED" for i in agreement_items),
         },
         "publication": {
             "status": pub.status,
@@ -212,6 +215,25 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
             for e in events
         ],
     }
+
+
+def lineage_view(db: Session, ch: Chamber, me: User) -> dict:
+    """Earlier and later Chambers on the same question. Only people who were in the earlier
+    Chamber see what it concluded."""
+    parent = None
+    if ch.parent_id:
+        p = db.get(Chamber, ch.parent_id)
+        was_member = p and db.scalar(select(Membership).where(Membership.chamber_id == p.id, Membership.user_id == me.id))
+        if p and was_member:
+            approved = []
+            for it in db.scalars(select(AgreementItem).where(AgreementItem.chamber_id == p.id)):
+                ds = [a.decision for a in db.scalars(select(Approval).where(Approval.item_id == it.id))]
+                n = len(protocol.members(db, p))
+                if len(ds) == n and all(d == "approve" for d in ds):
+                    approved.append({"text": it.text, "kind": it.kind or "agreement"})
+            parent = {"id": p.id, "title": p.title, "closed_state": p.closed_state, "closed_at": p.closed_at.isoformat() if p.closed_at else None, "approved": approved}
+    revisits = [{"id": c.id, "title": c.title, "state": c.state} for c in db.scalars(select(Chamber).where(Chamber.parent_id == ch.id))]
+    return {"parent": parent, "revisits": revisits}
 
 
 def preround_view(db: Session, ch: Chamber, me: User, mems: list[Membership]) -> dict:
@@ -277,6 +299,7 @@ class ChamberIn(BaseModel):
 
 @router.post("/chambers")
 def create_chamber(body: ChamberIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    ratelimit.check(user.id, "create")
     ch = Chamber(creator_id=user.id, template=body.template, title=body.title.strip(), question=body.question.strip(), invite_token=secrets.token_urlsafe(12))
     db.add(ch)
     db.flush()
@@ -328,17 +351,24 @@ def get_chamber(cid: str, user: User = Depends(current_user), db: Session = Depe
     return chamber_view(ch, user, db)
 
 
+@router.post("/chambers/{cid}/stream-ticket")
+def stream_ticket(cid: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """A 60-second, Chamber-scoped ticket for opening the event stream (EventSource can't send headers)."""
+    _chamber_for_member(cid, user, db)
+    return {"ticket": make_ticket(user.id, f"stream:{cid}"), "expires_in": 60}
+
+
 @router.get("/chambers/{cid}/stream")
-async def stream(cid: str, request: Request, token: str):
+async def stream(cid: str, request: Request, ticket: str):
     """Server-sent events: a 'change' event whenever anything in the Chamber changes.
 
     Carries no content (only event ids and types); clients refetch the authorized view.
-    EventSource can't set headers, so the session token comes as a query parameter (local dev).
+    Authenticated with a short-lived ticket from /stream-ticket, never the session token.
     """
+    user_id = read_ticket(ticket, f"stream:{cid}")
     with SessionLocal() as db:
-        sess = db.get(AuthSession, token)
-        if not sess or not db.scalar(select(Membership).where(Membership.chamber_id == cid, Membership.user_id == sess.user_id)):
-            err(403, "NOT_A_MEMBER", "You're not part of this Chamber.")
+        if not user_id or not db.scalar(select(Membership).where(Membership.chamber_id == cid, Membership.user_id == user_id)):
+            err(403, "BAD_TICKET", "Stream ticket is invalid or expired.")
 
     def snapshot(db) -> tuple[int, tuple]:
         last = db.scalar(select(ChamberEvent.id).where(ChamberEvent.chamber_id == cid).order_by(ChamberEvent.id.desc())) or 0
@@ -486,6 +516,7 @@ def delegate_draft(cid: str, user: User = Depends(human_user), db: Session = Dep
     d = protocol.delegate_for(db, user.id)
     if not d:
         err(400, "NO_DELEGATE", "Create a Delegate first, or write your position yourself.")
+    ratelimit.check(user.id, "engine")
     if d.autonomy == "L0" or d.status == "PAUSED":
         err(400, "DELEGATE_SILENT", "Your Delegate is paused or set to silent.")
     positions = [
@@ -516,6 +547,7 @@ def start_preround(cid: str, user: User = Depends(human_user), db: Session = Dep
         err(409, "ALREADY_STARTED", "A pre-round has already run in this Chamber.")
     if len(protocol.preround_participants(db, ch)) < 2:
         err(409, "GATE_NOT_SATISFIED", "A pre-round needs at least two people with active Delegates.")
+    ratelimit.check(user.id, "engine")
     protocol.emit(db, ch.id, "preround.started", "human", user.id)
     db.commit()
     protocol.start_run(db, ch, "preround_openings")
@@ -589,6 +621,8 @@ class AdvanceIn(BaseModel):
 def advance(cid: str, body: AdvanceIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
     ch, _ = _chamber_for_member(cid, user, db)
     _require_active(ch)
+    if body.action in ("analyze", "explore_options", "retry"):
+        ratelimit.check(user.id, "engine")
     mems = protocol.members(db, ch)
     if body.action == "analyze":
         if ch.state != "INTAKE":
@@ -634,6 +668,32 @@ def _close(db: Session, ch: Chamber, closed_state: str, user: User | None):
     db.commit()
     if closed_state != "ABANDONED":
         protocol.start_run(db, ch, "learn")
+
+
+@router.post("/chambers/{cid}/revisit")
+def revisit(cid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    """Reopen a closed Chamber as a new one with the same people, linked to the old outcome."""
+    ch, _ = _chamber_for_member(cid, user, db)
+    if ch.state != "CLOSED":
+        err(409, "WRONG_STATE", "Only closed Chambers can be revisited.")
+    ratelimit.check(user.id, "create")
+    title = ch.title if ch.title.lower().startswith("revisit") else f"Revisit: {ch.title}"
+    new = Chamber(
+        creator_id=user.id,
+        template=ch.template,
+        title=title[:120],
+        question=ch.question,
+        invite_token=secrets.token_urlsafe(12),
+        parent_id=ch.id,
+    )
+    db.add(new)
+    db.flush()
+    for i, m in enumerate(protocol.members(db, ch)):
+        db.add(Membership(chamber_id=new.id, user_id=m.user_id, role="creator" if m.user_id == user.id else "participant", alias=_alias(i)))
+    protocol.emit(db, new.id, "chamber.created", "human", user.id, revisit_of=ch.id)
+    protocol.emit(db, ch.id, "chamber.revisited", "human", user.id)
+    db.commit()
+    return chamber_view(new, user, db)
 
 
 @router.post("/chambers/{cid}/retention/extend")
@@ -723,6 +783,7 @@ class RejectIn(BaseModel):
 @router.post("/restatements/{rid}/reject")
 def reject_restatement(rid: str, body: RejectIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
     r, ch = _own_restatement(rid, user, db)
+    ratelimit.check(user.id, "engine")
     if r.revision >= protocol.MAX_ENGINE_REVISIONS:
         err(409, "WRITE_YOUR_OWN", "After three tries, please write how you'd like your view explained.")
     r.status = "REVISING"
@@ -775,16 +836,33 @@ def confirm_crux(xid: str, body: CruxIn, user: User = Depends(human_user), db: S
 class ItemIn(BaseModel):
     text: str = Field(min_length=3, max_length=1000)
     from_option: bool = False
+    kind: str = Field(default="agreement", pattern="^(agreement|understanding)$")
+
+
+def _require_open_for(ch: Chamber, kind: str):
+    """Agreements are made in RESOLUTION; an agree-to-disagree record after closing as UNDERSTOOD."""
+    if ch.paused:
+        err(409, "PAUSED", "This Chamber is paused. Resume it to continue.")
+    if kind == "agreement":
+        _require_active(ch)
+        if ch.state != "RESOLUTION":
+            err(409, "GATE_NOT_SATISFIED", "Agreements open after the Understanding Map and options.")
+    elif not (ch.state == "CLOSED" and ch.closed_state == "UNDERSTOOD" and not ch.purged_at):
+        err(409, "WRONG_STATE", "An agree-to-disagree record is for Chambers closed as understood.")
 
 
 @router.post("/chambers/{cid}/agreement/items")
 def add_item(cid: str, body: ItemIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
     ch, _ = _chamber_for_member(cid, user, db)
-    _require_active(ch)
-    if ch.state != "RESOLUTION":
-        err(409, "GATE_NOT_SATISFIED", "Agreements open after the Understanding Map and options.")
+    _require_open_for(ch, body.kind)
     # Adopting a Mediator option is still labelled as engine-proposed.
-    item = AgreementItem(chamber_id=ch.id, text=body.text.strip(), proposed_by_type="engine" if body.from_option else "human", proposed_by_id=user.id)
+    item = AgreementItem(
+        chamber_id=ch.id,
+        text=body.text.strip(),
+        proposed_by_type="engine" if body.from_option else "human",
+        proposed_by_id=user.id,
+        kind=body.kind,
+    )
     db.add(item)
     protocol.emit(db, ch.id, "agreement.item.proposed", "human", user.id)
     db.commit()
@@ -802,7 +880,7 @@ def decide_item(iid: str, body: DecideIn, user: User = Depends(human_user), db: 
     if not item:
         err(404, "NOT_FOUND", "Item not found.")
     ch, _ = _chamber_for_member(item.chamber_id, user, db)
-    _require_active(ch)
+    _require_open_for(ch, item.kind or "agreement")
     a = db.scalar(select(Approval).where(Approval.item_id == iid, Approval.user_id == user.id))
     if a:
         a.decision = body.decision
@@ -812,7 +890,7 @@ def decide_item(iid: str, body: DecideIn, user: User = Depends(human_user), db: 
     protocol.emit(db, ch.id, f"agreement.item.{body.decision}d", "human", user.id)
     db.commit()
     view = chamber_view(ch, user, db)
-    if view["agreement"]["all_approved"]:
+    if ch.state == "RESOLUTION" and view["agreement"]["all_approved"]:
         _close(db, ch, "AGREED", user)
         view = chamber_view(ch, user, db)
     return view

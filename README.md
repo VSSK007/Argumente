@@ -43,21 +43,25 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | Understanding Map | Where each person stands (only accepted restatements), shared ground, typed differences, cruxes, questions |
 | Interpretation Diff | For "same events, different meaning" disagreements: each person's observations next to their interpretations (endorsed words only) |
 | Options & Agreement | Mediator options, per-item approval by every person, nothing pre-approved |
+| Agree-to-disagree record | When a Chamber closes as understood, people co-sign how they'll live with the remaining difference (each approves separately) |
+| Revisit | Reopen a closed Chamber as a new one with the same people. Those who were in the original see what was agreed last time; newcomers don't. |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
 | Safety | Abuse/coercion/self-harm screening → private resources + quiet pause |
 | Publishing | Needs every participant's consent, anonymized by default, revocable → `/commons`, `/m/<slug>` |
 | Spar | Devil's Advocate / Steelman against 5 reasoning methodologies, with a robustness report |
 | Delegate learning | After a Chamber closes, your Delegate suggests up to 3 general positions, each backed by a quote of what you endorsed. Nothing is used until you **Keep** (private or public), edit, or discard it. |
 | Memory Inspector | View, edit (with change-of-mind history), retract, change scope; export JSON; delete account |
-| Live updates | Server-sent events push every change to everyone in the Chamber within about half a second. Polling is the fallback if the stream drops. |
+| Live updates | Server-sent events push every change to everyone in the Chamber within about half a second, authenticated with 60-second Chamber-scoped tickets (session tokens never go in URLs). Polling is the fallback if the stream drops. |
+| Rate limits | Per-person hourly limits on actions that call the Mediator (default 120) and on creating Chambers (default 30): `RATE_LIMIT_ENGINE_PER_HOUR`, `RATE_LIMIT_CREATE_PER_HOUR` |
 | Retention (D21) | A closed Chamber's private content (positions, restatements, Map, pre-round) is deleted 90 days after close unless a member extends it. Agreements, the event record, consented published Maps and positions you chose to keep survive. `RETENTION_DAYS` overrides. |
 
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 20 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 24 API tests incl. the safety invariants and the eval gate
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
 node e2e/preround.cjs                      # browser E2E: Delegate pre-round
+node e2e/lineage.cjs                       # browser E2E: agree-to-disagree record + revisit, live updates
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
 ```
 
@@ -77,7 +81,7 @@ docs/           Product ideation package (vision, PRD, architecture, safety, roa
 ```
 
 ### Deliberate simplifications vs `docs/SYSTEM_ARCHITECTURE.md`
-SQLite instead of Postgres/pgvector, in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub (and takes the session token as a query parameter, since `EventSource` can't send headers), and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
+SQLite instead of Postgres/pgvector, in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub, in-memory rate limits instead of Redis, and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
 
 ## Product docs
 

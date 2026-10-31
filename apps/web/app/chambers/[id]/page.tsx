@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api, useChamberStream, usePoll } from "@/lib/api";
 import {
@@ -93,6 +93,8 @@ export default function ChamberPage() {
 
       <ErrorNote error={error} />
 
+      {ch.lineage?.parent ? <ParentContext p={ch.lineage.parent} /> : null}
+
       {ch.engine_mode === "local-fallback" || ch.engine_mode === "mixed" ? (
         <p className="rounded-md bg-engine-tint/60 px-3 py-2 text-xs text-engine">
           Some of this analysis used the offline engine because a Claude API call failed (see the API logs). Results are more literal than usual.
@@ -162,7 +164,6 @@ export default function ChamberPage() {
             </Card>
           ) : null}
           {ch.state === "RESOLUTION" ? <Resolution ch={ch} act={act} /> : null}
-          <Publish ch={ch} act={act} />
         </>
       ) : null}
 
@@ -176,10 +177,14 @@ export default function ChamberPage() {
                 ? "Understood each other. Still disagree, and that’s allowed."
                 : "Abandoned."}
           </p>
-          {ch.agreement.items.length ? <AgreementList ch={ch} act={act} readOnly /> : null}
+          {ch.agreement.items.some((i: any) => i.kind === "agreement") ? <AgreementList ch={ch} act={act} readOnly /> : null}
+          {ch.closed_state === "UNDERSTOOD" && !ch.retention?.purged ? <UnderstandingRecord ch={ch} act={act} /> : null}
+          <Lineage ch={ch} />
           <Retention ch={ch} act={act} />
         </Card>
       ) : null}
+
+      {ch.map ? <Publish ch={ch} act={act} /> : null}
 
       {ch.state === "INTAKE" && ch.is_creator ? (
         <div className="text-right">
@@ -707,11 +712,22 @@ function Resolution({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Pro
   );
 }
 
-function AgreementList({ ch, act, readOnly }: { ch: any; act: (p: string, b?: unknown) => Promise<any>; readOnly?: boolean }) {
-  if (!ch.agreement.items.length) return <p className="text-sm text-ink-2">No items proposed yet.</p>;
+function AgreementList({
+  ch,
+  act,
+  readOnly,
+  kind = "agreement",
+}: {
+  ch: any;
+  act: (p: string, b?: unknown) => Promise<any>;
+  readOnly?: boolean;
+  kind?: "agreement" | "understanding";
+}) {
+  const items = ch.agreement.items.filter((i: any) => i.kind === kind);
+  if (!items.length) return <p className="text-sm text-ink-2">No items proposed yet.</p>;
   return (
     <ul className="mt-2 space-y-3">
-      {ch.agreement.items.map((it: any) => (
+      {items.map((it: any) => (
         <li key={it.id} className="rounded-md border hairline bg-white p-3">
           <div className="flex items-start justify-between gap-3">
             <p className="prose-body">{it.text}</p>
@@ -744,6 +760,112 @@ function AgreementList({ ch, act, readOnly }: { ch: any; act: (p: string, b?: un
         </li>
       ))}
     </ul>
+  );
+}
+
+/* ================================================================= agree-to-disagree & lineage */
+
+function UnderstandingRecord({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  const types = Array.from(new Set((ch.map?.differences ?? []).map((d: any) => d.type.toLowerCase())));
+  const q = (ch.map?.headline ?? ch.question).trim();
+  const starter = `We understand each other’s views on “${q}”${/[?.!]$/.test(q) ? "" : "."} We still differ on ${
+    types.length ? types.join(" and ") + " grounds" : "this"
+  }. We’ll handle it by: `;
+  const [text, setText] = useState(starter);
+  const has = ch.agreement.items.some((i: any) => i.kind === "understanding");
+  return (
+    <div className="mt-5 border-t hairline pt-4">
+      <div className="label-mono text-ink-2">Agree-to-disagree record</div>
+      <p className="mt-1 text-sm text-ink-2">
+        A record you all sign: you understand each other, you still differ, and here’s how you’ll live with it. Each person approves it
+        separately; nothing is pre-approved.
+      </p>
+      {has ? <AgreementList ch={ch} act={act} kind="understanding" /> : null}
+      <TextArea rows={3} className="mt-3" value={text} onChange={(e) => setText(e.target.value)} />
+      <Button
+        className="mt-2"
+        variant="quiet"
+        disabled={text.trim().length < starter.length + 3 || ch.paused}
+        onClick={async () => {
+          await act(`/chambers/${ch.id}/agreement/items`, { text, kind: "understanding" });
+          setText(starter);
+        }}
+      >
+        Propose this record
+      </Button>
+    </div>
+  );
+}
+
+function Lineage({ ch }: { ch: any }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const revisits = ch.lineage?.revisits ?? [];
+  return (
+    <div className="mt-5 border-t hairline pt-4">
+      <div className="label-mono text-ink-2">Things change</div>
+      {revisits.length ? (
+        <p className="mt-1 text-sm">
+          Revisited in{" "}
+          {revisits.map((r: any, i: number) => (
+            <span key={r.id}>
+              {i ? ", " : ""}
+              <Link href={`/chambers/${r.id}`} className="underline">
+                {r.title}
+              </Link>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            setError(null);
+            try {
+              const v = await api(`/chambers/${ch.id}/revisit`, { body: {} });
+              router.push(`/chambers/${v.id}`);
+            } catch (e: any) {
+              setError(e.message);
+            }
+          }}
+        >
+          Revisit this with the same people
+        </Button>
+        <span className="text-xs text-ink-2">Starts a new Chamber on the same question, linked to this outcome.</span>
+      </div>
+      <ErrorNote error={error} />
+    </div>
+  );
+}
+
+function ParentContext({ p }: { p: any }) {
+  return (
+    <Card className="border-delegate/40 bg-delegate-tint/30">
+      <div className="label-mono text-ink-2">Revisiting</div>
+      <p className="mt-1">
+        <Link href={`/chambers/${p.id}`} className="font-display text-xl underline">
+          {p.title}
+        </Link>{" "}
+        <span className="text-sm text-ink-2">
+          closed {p.closed_at ? new Date(p.closed_at).toLocaleDateString() : ""} as {p.closed_state?.toLowerCase()}
+        </span>
+      </p>
+      {p.approved.length ? (
+        <ul className="mt-2 space-y-1 text-sm">
+          {p.approved.map((a: any, i: number) => (
+            <li key={i}>
+              <span className="label-mono mr-2 text-agree">{a.kind === "understanding" ? "agreed to disagree" : "agreed"}</span>
+              {a.text}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-ink-2">Nothing was formally agreed last time.</p>
+      )}
+      <p className="mt-2 text-xs text-ink-2">Positions start fresh: what you think now may differ from then, and that’s the point.</p>
+    </Card>
   );
 }
 
@@ -875,6 +997,7 @@ const EVENT_LABEL: Record<string, string> = {
   "publication.published": "Map published",
   "retention.extended": "extended how long this Chamber is kept",
   "chamber.purged": "Private content deleted (retention)",
+  "chamber.revisited": "started a revisit of this Chamber",
   "preround.started": "started a Delegate pre-round",
   "preround.openings.drafted": "Delegates drafted openings",
   "preround.replies.drafted": "Delegates drafted replies",
