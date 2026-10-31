@@ -26,6 +26,7 @@ from .models import (
     Membership,
     Node,
     Position,
+    PreRoundTurn,
     Restatement,
     UnderstandingMap,
 )
@@ -113,7 +114,14 @@ def _execute(run_id: str):
     try:
         run = db.get(EngineRun, run_id)
         chamber = db.get(Chamber, run.chamber_id)
-        handler = {"decompose": _run_decompose, "revise": _run_revise, "map": _run_map, "options": _run_options}[run.kind]
+        handler = {
+            "decompose": _run_decompose,
+            "revise": _run_revise,
+            "map": _run_map,
+            "options": _run_options,
+            "preround_openings": _run_preround_openings,
+            "preround_replies": _run_preround_replies,
+        }[run.kind]
         mode = handler(db, run, chamber)
         run.status = "DONE"
         run.step = "done"
@@ -302,11 +310,90 @@ def _run_options(db: Session, run: EngineRun, chamber: Chamber) -> str:
     return mode
 
 
+# --------------------------------------------------------------------------------------
+# Delegate pre-round
+# --------------------------------------------------------------------------------------
+def preround_participants(db: Session, chamber: Chamber) -> list[tuple[Membership, Delegate]]:
+    """Members whose Delegate is active and allowed to draft (autonomy L1)."""
+    out = []
+    for m in members(db, chamber):
+        d = delegate_for(db, m.user_id)
+        if d and d.status == "ACTIVE" and d.autonomy == "L1":
+            out.append((m, d))
+    return out
+
+
+def preround_turns(db: Session, chamber_id: str, kind: str | None = None) -> list[PreRoundTurn]:
+    stmt = select(PreRoundTurn).where(PreRoundTurn.chamber_id == chamber_id)
+    if kind:
+        stmt = stmt.where(PreRoundTurn.kind == kind)
+    return list(db.scalars(stmt.order_by(PreRoundTurn.created_at)))
+
+
+def phase_settled(turns: list[PreRoundTurn]) -> bool:
+    return bool(turns) and all(t.status != "DRAFT" for t in turns)
+
+
+def _run_preround_openings(db: Session, run: EngineRun, chamber: Chamber) -> str:
+    engine = get_engine()
+    mode = None
+    for m, d in preround_participants(db, chamber):
+        _step(db, run, f"{d.name} is drafting {m.user.name}'s opening")
+        positions = [{"id": p.id, "statement": p.statement, "stance": p.stance} for p in scoped_positions(db, d.id, chamber.id)]
+        out, m_mode = engine.draft_position(chamber.question, m.user.name, positions, voice="third")
+        mode = m_mode if mode is None else combine_modes(mode, m_mode)
+        _check_not_paused(db, chamber.id)
+        db.add(
+            PreRoundTurn(
+                chamber_id=chamber.id,
+                owner_id=m.user_id,
+                kind="opening",
+                text=safety.check_output(out.text, [m.user.name]),
+                unknowns=out.unknowns,
+            )
+        )
+    emit(db, chamber.id, "preround.openings.drafted", "engine")
+    return mode or "local"
+
+
+def _run_preround_replies(db: Session, run: EngineRun, chamber: Chamber) -> str:
+    from .engine.types import OtherOpening
+
+    engine = get_engine()
+    mode = None
+    openings = [t for t in preround_turns(db, chamber.id, "opening") if t.status == "RELEASED"]
+    names = {m.user_id: m.user.name for m in members(db, chamber)}
+    for t in openings:
+        d = delegate_for(db, t.owner_id)
+        if not d:
+            continue
+        _step(db, run, f"{d.name} is replying for {names[t.owner_id]}")
+        positions = [{"id": p.id, "statement": p.statement, "stance": p.stance} for p in scoped_positions(db, d.id, chamber.id)]
+        others = [OtherOpening(label=names[o.owner_id], text=o.text) for o in openings if o.owner_id != t.owner_id]
+        out, m_mode = engine.delegate_reply(chamber.question, names[t.owner_id], positions, t.text, others)
+        mode = m_mode if mode is None else combine_modes(mode, m_mode)
+        _check_not_paused(db, chamber.id)
+        db.add(
+            PreRoundTurn(
+                chamber_id=chamber.id,
+                owner_id=t.owner_id,
+                kind="reply",
+                text=safety.check_output(out.text, list(names.values())),
+                unknowns=out.unknowns,
+            )
+        )
+    emit(db, chamber.id, "preround.replies.drafted", "engine")
+    return mode or "local"
+
+
 def resume_pending_run(db: Session, chamber: Chamber):
     """After resume: restart the step that a pause cancelled."""
     kind = {"ANALYZING": "decompose", "MAPPING": "map", "OPTIONS_PENDING": "options"}.get(chamber.state)
     if kind:
         start_run(db, chamber, kind)
+    last = db.scalars(select(EngineRun).where(EngineRun.chamber_id == chamber.id).order_by(EngineRun.created_at.desc())).first()
+    if chamber.state == "INTAKE" and last and last.status == "CANCELLED" and last.kind.startswith("preround"):
+        start_run(db, chamber, last.kind)
     for rst in db.scalars(select(Restatement).where(Restatement.chamber_id == chamber.id, Restatement.status == "REVISING")):
         start_run(db, chamber, "revise", target_id=rst.id)
 

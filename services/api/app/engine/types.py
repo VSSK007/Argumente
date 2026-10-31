@@ -88,9 +88,19 @@ class OptionsOut(BaseModel):
 
 # ---------- delegate draft ----------
 class DraftOut(BaseModel):
-    text: str = Field(description="A first-person draft the owner can edit. Only use the endorsed positions given.")
+    text: str = Field(description="A draft the owner can edit. Only use the endorsed positions given.")
     used_position_ids: list[str]
     unknowns: list[str] = Field(description="Things the Delegate does not know about its owner's view here.")
+
+
+class OtherOpening(BaseModel):
+    label: str
+    text: str
+
+
+class ReplyOut(BaseModel):
+    text: str = Field(description="The Delegate's reply, in the third person about its owner. Only endorsed positions.")
+    unknowns: list[str] = Field(description="Points from others the owner has never taken a position on.")
 
 
 # ---------- spar ----------

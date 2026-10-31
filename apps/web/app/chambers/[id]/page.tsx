@@ -135,6 +135,7 @@ export default function ChamberPage() {
               open_questions: ch.map.open_questions,
             }}
           />
+          <InterpretationDiff ch={ch} />
           <GraphDetails ch={ch} />
           {ch.state === "MAP" && !ch.paused ? (
             <Card className="mx-auto max-w-[720px]">
@@ -219,6 +220,7 @@ function Intake({ ch, me, act }: { ch: any; me: Member; act: (p: string, b?: unk
 
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_280px]">
+      <div className="space-y-6">
       <Card>
         <SectionTitle kicker="Private · only you can see this">Your position</SectionTitle>
         <p className="mb-3 text-sm text-ink-2">{ch.template_prompt} Others will never see your exact words; the Mediator explains your view and you check it.</p>
@@ -293,6 +295,15 @@ function Intake({ ch, me, act }: { ch: any; me: Member; act: (p: string, b?: unk
           </>
         )}
       </Card>
+      <PreRound
+        ch={ch}
+        act={act}
+        onUse={(t) => {
+          setText(t);
+          setEditing(true);
+        }}
+      />
+      </div>
 
       <div className="space-y-4">
         <Card>
@@ -324,6 +335,112 @@ function Intake({ ch, me, act }: { ch: any; me: Member; act: (p: string, b?: unk
             Ask the Mediator to read
           </Button>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================= Delegate pre-round */
+
+function PreRound({ ch, act, onUse }: { ch: any; act: (p: string, b?: unknown) => Promise<any>; onUse: (t: string) => void }) {
+  const pr = ch.preround;
+  const participants = ch.members.filter((m: Member) => pr.participant_ids.includes(m.user_id));
+  const running = ch.run?.status === "RUNNING" && ch.run.kind?.startsWith("preround");
+  if (pr.phase === "none" && !pr.can_start && !running) {
+    return participants.length < 2 && ch.members.length >= 2 ? (
+      <p className="text-xs text-ink-2">A Delegate pre-round becomes available when at least two people here have an active Delegate.</p>
+    ) : null;
+  }
+  const openings = pr.turns.filter((t: any) => t.kind === "opening");
+  const replies = pr.turns.filter((t: any) => t.kind === "reply");
+  const myReleased = pr.turns.filter((t: any) => t.is_mine && t.status === "RELEASED");
+
+  return (
+    <Card>
+      <SectionTitle kicker="Optional · Delegates go first">Delegate pre-round</SectionTitle>
+      <p className="text-sm text-ink-2">
+        Your Delegates sketch each side from what you’ve endorsed, then reply to each other once. You review and edit your own Delegate’s
+        turn before anyone sees it, and turns are revealed to everyone at the same time.
+      </p>
+      {pr.phase === "none" ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button variant="secondary" disabled={ch.paused || running} onClick={() => act(`/chambers/${ch.id}/preround/start`)}>
+            Start a pre-round
+          </Button>
+          <span className="text-xs text-ink-2">With: {participants.map((m: Member) => m.name).join(", ")}</span>
+        </div>
+      ) : null}
+
+      {openings.length ? <TurnList title="Openings" turns={openings} pending={pr.pending.opening} ch={ch} act={act} /> : null}
+      {replies.length ? <TurnList title="Replies" turns={replies} pending={pr.pending.reply} ch={ch} act={act} /> : null}
+
+      {pr.phase === "done" && myReleased.length ? (
+        <div className="mt-4 border-t hairline pt-3">
+          <Button variant="quiet" onClick={() => onUse(myReleased.map((t: any) => t.text).join("\n\n"))}>
+            Use my side as a starting point for my position
+          </Button>
+          <p className="mt-1 text-xs text-ink-2">It goes into your private composer as text you can rewrite in your own words before endorsing.</p>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function TurnList({ title, turns, pending, ch, act }: { title: string; turns: any[]; pending: string[]; ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  return (
+    <div className="mt-5">
+      <div className="label-mono text-ink-2">{title}</div>
+      {pending.length ? <p className="mt-1 text-xs text-ink-2">Waiting for {pending.join(", ")} to review their Delegate’s turn. Others’ turns appear when everyone has.</p> : null}
+      <div className="mt-2 space-y-3">
+        {turns.map((t) => (t.is_mine && t.status === "DRAFT" ? <MyDraftTurn key={t.id} t={t} ch={ch} act={act} /> : <TurnView key={t.id} t={t} />))}
+      </div>
+    </div>
+  );
+}
+
+function TurnView({ t }: { t: any }) {
+  return (
+    <div className="rounded-md border-l-2 border-l-delegate bg-delegate-tint/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {t.delegate ? <DelegateBadge name={t.delegate.name} ownerName={t.owner_name} seed={t.delegate.glyph_seed} /> : null}
+        {t.status === "WITHDRAWN" ? <span className="label-mono text-ink-2">withdrawn · not shown to others</span> : <EpistemicTag status="ENDORSED" />}
+      </div>
+      {t.status !== "WITHDRAWN" ? (
+        <>
+          <p className="font-body mt-2">{t.text}</p>
+          <p className="mt-1 text-xs text-ink-2">
+            {t.authored_by === "human" ? `Rewritten and released by ${t.owner_name}` : `Reviewed and released by ${t.owner_name}`}
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MyDraftTurn({ t, ch, act }: { t: any; ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  const [text, setText] = useState(t.text);
+  return (
+    <div className="rounded-md border border-delegate/40 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {t.delegate ? <DelegateBadge name={t.delegate.name} ownerName={t.owner_name} seed={t.delegate.glyph_seed} /> : null}
+        <EpistemicTag status="DRAFT" />
+        <span className="text-xs text-ink-2">Only you can see this</span>
+      </div>
+      <TextArea rows={4} className="mt-2" value={text} onChange={(e) => setText(e.target.value)} placeholder="Your Delegate didn’t know enough to draft this. Write it, or withdraw." />
+      {t.unknowns?.length ? (
+        <ul className="mt-2 space-y-0.5 text-xs text-delegate">
+          {t.unknowns.map((u: string, i: number) => (
+            <li key={i}>• Doesn’t know: {u}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button disabled={text.trim().length < 3 || ch.paused} onClick={() => act(`/preround-turns/${t.id}/release`, { text })}>
+          Release to the group
+        </Button>
+        <Button variant="ghost" disabled={ch.paused} onClick={() => act(`/preround-turns/${t.id}/withdraw`)}>
+          Withdraw
+        </Button>
       </div>
     </div>
   );
@@ -442,6 +559,54 @@ function Cruxes({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise
 }
 
 /* ================================================================= analysis details */
+
+/** Same events, different meanings: each person's observations next to their interpretations.
+ *  Only ENDORSED claims (verbatim from what they endorsed) are attributed here (invariant 3). */
+function InterpretationDiff({ ch }: { ch: any }) {
+  const claims = ch.graph.nodes.filter((n: any) => n.kind === "CLAIM" && n.epistemic_status === "ENDORSED");
+  if (!claims.some((n: any) => n.claim_type === "INTERPRETATION")) return null;
+  const people = ch.members.filter((m: Member) => claims.some((n: any) => n.holder_id === m.user_id));
+  return (
+    <section className="mx-auto max-w-[720px]">
+      <h2 className="label-mono border-b hairline pb-2 text-ink-2">Interpretation diff</h2>
+      <p className="mt-2 text-sm text-ink-2">
+        What each person describes as happening, next to what they take it to mean. Disagreements about meaning often dissolve once
+        the observations are separated out.
+      </p>
+      <div className={`mt-4 grid gap-4 ${people.length > 1 ? "md:grid-cols-2" : ""}`}>
+        {people.map((m: Member) => {
+          const mine = claims.filter((n: any) => n.holder_id === m.user_id);
+          const obs = mine.filter((n: any) => n.claim_type === "FACT");
+          const interp = mine.filter((n: any) => n.claim_type === "INTERPRETATION");
+          return (
+            <div key={m.user_id} className="rounded-lg border hairline bg-white/70 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-display text-lg">{m.name}</span>
+                <EpistemicTag status="ENDORSED" />
+              </div>
+              <div className="label-mono mt-3 text-ink-2">Observes</div>
+              <ul className="font-body mt-1 space-y-1">
+                {obs.length ? obs.map((n: any) => <li key={n.id}>{n.text}</li>) : <li className="text-sm italic text-ink-2">No plain observations stated.</li>}
+              </ul>
+              <div className="label-mono mt-3 text-engine">Takes it to mean</div>
+              <ul className="font-body mt-1 space-y-1">
+                {interp.length ? (
+                  interp.map((n: any) => (
+                    <li key={n.id} className="border-l-2 border-engine/50 pl-2">
+                      {n.text}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-sm italic text-ink-2">No interpretations stated.</li>
+                )}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function GraphDetails({ ch }: { ch: any }) {
   const nodes = ch.graph.nodes;
@@ -673,6 +838,15 @@ const EVENT_LABEL: Record<string, string> = {
   "publication.consent.granted": "consented to publish",
   "publication.consent.revoked": "withdrew publishing consent",
   "publication.published": "Map published",
+  "preround.started": "started a Delegate pre-round",
+  "preround.openings.drafted": "Delegates drafted openings",
+  "preround.replies.drafted": "Delegates drafted replies",
+  "preround.opening.released": "released their Delegate's opening",
+  "preround.reply.released": "released their Delegate's reply",
+  "preround.opening.withdrawn": "withdrew their Delegate's opening",
+  "preround.reply.withdrawn": "withdrew their Delegate's reply",
+  "preround.openings.revealed": "Openings revealed to everyone",
+  "preround.replies.revealed": "Replies revealed to everyone",
 };
 
 function Record({ events }: { events: any[] }) {

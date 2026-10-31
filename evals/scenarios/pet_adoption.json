@@ -1,0 +1,18 @@
+{
+  "id": "pet_adoption",
+  "question": "Should we adopt a dog?",
+  "parties": [
+    {
+      "label": "Sara",
+      "text": "I really want a dog. It would get us outside more and I'd walk it every morning."
+    },
+    {
+      "label": "Omar",
+      "text": "A dog is a 12-year commitment and we travel a lot. I'm worried we'll end up paying for kennels constantly."
+    }
+  ],
+  "expected_types": [
+    "PREDICTION",
+    "INTEREST"
+  ]
+}

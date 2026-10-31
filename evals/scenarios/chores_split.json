@@ -1,0 +1,23 @@
+{
+  "id": "chores_split",
+  "question": "How should we split the chores in the flat?",
+  "parties": [
+    {
+      "label": "Dev",
+      "text": "Chores should be split by time, because cleaning the bathroom takes far longer than taking out the bins."
+    },
+    {
+      "label": "Maya",
+      "text": "We should just alternate weeks. Keeping a time log for chores will create more arguments, not fewer."
+    },
+    {
+      "label": "Leo",
+      "text": "I work nights so I can't do anything noisy in the mornings. I'm happy to do more of the quiet tasks."
+    }
+  ],
+  "expected_types": [
+    "VALUE",
+    "PREDICTION",
+    "INTEREST"
+  ]
+}

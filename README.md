@@ -37,9 +37,11 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | Delegate onboarding | Name, voice, methodology, position cards → endorsed positions. Guests can skip it (D19). |
 | Chambers | Decision / Disagreement / Household templates, invite links, up to 8 people |
 | Private intake | Write your position, or have your Delegate draft it from endorsed positions (stays a draft until you endorse) |
+| **Delegate pre-round** | Optional. Delegates draft openings, then one round of replies, from endorsed positions only. Each owner reviews, edits or withdraws their own Delegate's turn. Turns are revealed to everyone at once, so nobody anchors on the others. |
 | Mediator analysis | Claims typed FACT/VALUE/INTEREST/INTERPRETATION/PREDICTION/DEFINITION, assumptions, interests, cruxes |
 | **Restatement Gate** | Each person must accept how their view was explained ("Not quite" → revision, max 3, then write it yourself) before anything else unlocks |
 | Understanding Map | Where each person stands (only accepted restatements), shared ground, typed differences, cruxes, questions |
+| Interpretation Diff | For "same events, different meaning" disagreements: each person's observations next to their interpretations (endorsed words only) |
 | Options & Agreement | Mediator options, per-item approval by every person, nothing pre-approved |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
 | Safety | Abuse/coercion/self-harm screening → private resources + quiet pause |
@@ -50,8 +52,16 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 12 API tests incl. the safety invariants
-node e2e/flow.cjs                          # browser E2E (needs both servers running)
+cd services/api && uv run pytest          # 18 API tests incl. the safety invariants and the eval gate
+node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
+node e2e/preround.cjs                      # browser E2E: Delegate pre-round
+cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
+```
+
+### Mediator evals
+`evals/scenarios/` holds 10 disagreements (trips, couples, chores, rent, family, work, money, definitions). `evals/run.py` scores fabricated or misattributed quotes (target 0), coverage, disagreement-type recall and restatement balance for whichever engine is configured, so you can compare the offline engine against Claude once you add a key. The offline baseline is in [`evals/REPORT.md`](evals/REPORT.md). `tests/test_evals.py` fails the build if the offline engine ever fabricates a quote.
+
+```bash
 ```
 
 ## Layout
@@ -61,7 +71,8 @@ services/api/   FastAPI + SQLAlchemy (SQLite by default; set DATABASE_URL for Po
   app/engine/   Argumentative Intelligence engine: local.py (offline), anthropic_provider.py, router.py
   app/protocol.py  Chamber state machine, engine runs, scoped memory retrieval
 apps/web/       Next.js 16 + React 19 + Tailwind 4
-e2e/            Playwright end-to-end flow
+e2e/            Playwright end-to-end flows
+evals/          Mediator eval scenarios + harness
 docs/           Product ideation package (vision, PRD, architecture, safety, roadmap…)
 ```
 

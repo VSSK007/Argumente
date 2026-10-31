@@ -26,6 +26,9 @@ Plus **Solo Spar**. Someone arriving alone gets value immediately, and it also d
 | Couple template | ❌ Deferred (v1) | Requires safety-expert review |
 | Native apps, PWA push, follows, topics | ❌ Deferred | |
 
+## Build status (local MVP, branch `feat/local-mvp`)
+Built: M1–M12, S1 (agreements), S2 (publish + public page), S3 (eval harness, `evals/`), S4 (rule-based screening), C1 (Delegate pre-round), C2 (public Delegate profile), C3 (Interpretation Diff), C4 (Commons). Not built: S5 deploy (waiting on accounts and keys, D15).
+
 ## 2. Prioritized backlog
 
 **Must-have (demo fails without these)**

@@ -21,6 +21,7 @@ from ..models import (
     Membership,
     Node,
     Position,
+    PreRoundTurn,
     Publication,
     PublicationConsent,
     Restatement,
@@ -114,6 +115,7 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
     events = list(db.scalars(select(ChamberEvent).where(ChamberEvent.chamber_id == ch.id).order_by(ChamberEvent.id.desc()).limit(30)))
 
     return {
+        "preround": preround_view(db, ch, me, mems),
         "id": ch.id,
         "title": ch.title,
         "question": ch.question,
@@ -201,6 +203,55 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
             {"id": e.id, "type": e.type, "actor_type": e.actor_type, "actor_name": names.get(e.actor_id), "payload": e.payload, "at": e.created_at.isoformat()}
             for e in events
         ],
+    }
+
+
+def preround_view(db: Session, ch: Chamber, me: User, mems: list[Membership]) -> dict:
+    participants = protocol.preround_participants(db, ch)
+    turns = protocol.preround_turns(db, ch.id)
+    openings = [t for t in turns if t.kind == "opening"]
+    replies = [t for t in turns if t.kind == "reply"]
+    if not openings:
+        phase = "none"
+    elif not protocol.phase_settled(openings):
+        phase = "openings"
+    elif not replies:
+        phase = "replies_pending" if sum(t.status == "RELEASED" for t in openings) >= 2 else "done"
+    elif not protocol.phase_settled(replies):
+        phase = "replies"
+    else:
+        phase = "done"
+    revealed = {"opening": protocol.phase_settled(openings), "reply": protocol.phase_settled(replies)}
+    names = {m.user_id: m.user.name for m in mems}
+    visible = []
+    for t in turns:
+        mine = t.owner_id == me.id
+        # Others' turns are hidden until released AND every participant has reviewed theirs (simultaneous reveal).
+        if not mine and not (t.status == "RELEASED" and revealed[t.kind]):
+            continue
+        d = protocol.delegate_for(db, t.owner_id)
+        visible.append(
+            {
+                "id": t.id,
+                "owner_id": t.owner_id,
+                "owner_name": names.get(t.owner_id),
+                "delegate": {"name": d.name, "glyph_seed": d.glyph_seed, "handle": d.handle} if d else None,
+                "kind": t.kind,
+                "text": t.text,
+                "status": t.status,
+                "authored_by": t.authored_by,
+                "unknowns": t.unknowns if mine else [],
+                "is_mine": mine,
+            }
+        )
+    return {
+        "phase": phase,
+        "participant_ids": [m.user_id for m, _ in participants],
+        "can_start": ch.state == "INTAKE" and not openings and len(participants) >= 2,
+        "pending": {
+            k: [names.get(t.owner_id) for t in ts if t.status == "DRAFT"] for k, ts in (("opening", openings), ("reply", replies))
+        },
+        "turns": visible,
     }
 
 
@@ -399,6 +450,81 @@ def delegate_draft(cid: str, user: User = Depends(human_user), db: Session = Dep
     protocol.emit(db, ch.id, "position.drafted", "delegate", user.id)
     db.commit()
     return {"drafted": True, "unknowns": out.unknowns, "engine_mode": mode, "used_position_ids": out.used_position_ids}
+
+
+# ----------------------------------------------------------------------------- Delegate pre-round
+@router.post("/chambers/{cid}/preround/start")
+def start_preround(cid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    ch, _ = _chamber_for_member(cid, user, db)
+    _require_active(ch)
+    if ch.state != "INTAKE":
+        err(409, "WRONG_STATE", "The pre-round happens before analysis.")
+    if protocol.preround_turns(db, ch.id):
+        err(409, "ALREADY_STARTED", "A pre-round has already run in this Chamber.")
+    if len(protocol.preround_participants(db, ch)) < 2:
+        err(409, "GATE_NOT_SATISFIED", "A pre-round needs at least two people with active Delegates.")
+    protocol.emit(db, ch.id, "preround.started", "human", user.id)
+    db.commit()
+    protocol.start_run(db, ch, "preround_openings")
+    return chamber_view(ch, user, db)
+
+
+class ReleaseIn(BaseModel):
+    text: str = Field(min_length=3, max_length=3000)
+
+
+def _own_turn(tid: str, user: User, db: Session) -> tuple[PreRoundTurn, Chamber]:
+    t = db.get(PreRoundTurn, tid)
+    if not t:
+        err(404, "NOT_FOUND", "Turn not found.")
+    ch, _ = _chamber_for_member(t.chamber_id, user, db)
+    if t.owner_id != user.id:
+        err(403, "NOT_YOURS", "Only the Delegate's owner can release or withdraw its turns.")
+    _require_active(ch)
+    if ch.state != "INTAKE":
+        err(409, "WRONG_STATE", "The pre-round is over.")
+    if t.status != "DRAFT":
+        err(409, "ALREADY_DECIDED", "You've already decided on this turn.")
+    return t, ch
+
+
+def _after_turn_decision(db: Session, ch: Chamber, kind: str):
+    turns = protocol.preround_turns(db, ch.id, kind)
+    if kind == "opening" and protocol.phase_settled(turns):
+        protocol.emit(db, ch.id, "preround.openings.revealed", "system")
+        db.commit()
+        if sum(t.status == "RELEASED" for t in turns) >= 2:
+            protocol.start_run(db, ch, "preround_replies")
+    elif kind == "reply" and protocol.phase_settled(turns):
+        protocol.emit(db, ch.id, "preround.replies.revealed", "system")
+        db.commit()
+
+
+@router.post("/preround-turns/{tid}/release")
+def release_turn(tid: str, body: ReleaseIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    """The owner reviews (and may rewrite) their Delegate's turn before anyone else can see it."""
+    t, ch = _own_turn(tid, user, db)
+    text = body.text.strip()
+    if text != t.text:
+        t.authored_by = "human"
+    t.text = safety.check_output(text, [user.name])
+    t.status = "RELEASED"
+    flagged = _screen_and_maybe_pause(db, ch, user, text)
+    protocol.emit(db, ch.id, f"preround.{t.kind}.released", "human", user.id)
+    db.commit()
+    if not flagged:
+        _after_turn_decision(db, ch, t.kind)
+    return chamber_view(ch, user, db)
+
+
+@router.post("/preround-turns/{tid}/withdraw")
+def withdraw_turn(tid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    t, ch = _own_turn(tid, user, db)
+    t.status = "WITHDRAWN"
+    protocol.emit(db, ch.id, f"preround.{t.kind}.withdrawn", "human", user.id)
+    db.commit()
+    _after_turn_decision(db, ch, t.kind)
+    return chamber_view(ch, user, db)
 
 
 # ----------------------------------------------------------------------------- protocol transitions

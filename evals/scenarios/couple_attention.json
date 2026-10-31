@@ -1,0 +1,18 @@
+{
+  "id": "couple_attention",
+  "question": "How do we make sure we both feel cared for?",
+  "parties": [
+    {
+      "label": "Alice",
+      "text": "Bob doesn't give me enough emotional attention. When he's on his phone at dinner it feels like I'm not a priority. I need us to have time together that's just for us."
+    },
+    {
+      "label": "Bob",
+      "text": "I show commitment through what I do: I cook, I handle the bills, I fixed the car last week. I'm tired after work so I relax on my phone because it's the only downtime I get."
+    }
+  ],
+  "expected_types": [
+    "INTERPRETATION",
+    "VALUE"
+  ]
+}

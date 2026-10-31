@@ -19,6 +19,7 @@ from .types import (
     OptionsOut,
     Party,
     PartyNote,
+    ReplyOut,
     RestatementOut,
     SparReport,
     SparTurnOut,
@@ -68,7 +69,7 @@ def sentences(text: str) -> list[str]:
 
 def classify(s: str) -> str:
     low = s.lower()
-    if re.search(r"\b(i mean|by .{1,30} i mean|define|definition|counts as)\b", low):
+    if re.search(r"\b(i mean|by .{1,30} i mean|define|definition|counts as)\b", low) or re.match(r"^[\w ]{1,20} means\b", low):
         return "DEFINITION"
     if re.search(r"\b(will|going to|would lead|likely|probably|end up|risk)\b", low):
         return "PREDICTION"
@@ -104,7 +105,7 @@ def _reason(s: str) -> str | None:
 
 
 def _interest(s: str) -> bool:
-    return bool(re.search(r"\b(i need|i want|for me|i can't|i cannot|i'd like|matters to me|i care|my budget|i'm worried|i worry)\b", s, re.I))
+    return bool(re.search(r"\b(i need|i (really )?want|for me|i can't|i cannot|i'd like|matters to me|i care|my budget|i'm worried|i worry)\b", s, re.I))
 
 
 class LocalEngine:
@@ -200,6 +201,44 @@ class LocalEngine:
                         f"{labels[i.party_id]}: {_strip_end(i.text)}" for i in interests[:4]
                     ) + ".",
                     party_ids=sorted(ints),
+                )
+            )
+        # VALUE (fallback): several people make normative claims that don't share a theme-level emphasis
+        if not any(d.type == "VALUE" for d in disagreements):
+            normative = {}
+            for c in claims:
+                if c.claim_type in ("VALUE", "POLICY") and c.party_id not in normative:
+                    normative[c.party_id] = c.text
+            if len(normative) >= 2:
+                disagreements.append(
+                    Disagreement(
+                        type="VALUE",
+                        summary="Different views on what should happen: "
+                        + "; ".join(f"{labels[pid]}: \u201c{_strip_end(t)}\u201d" for pid, t in normative.items())
+                        + ".",
+                        party_ids=sorted(normative),
+                    )
+                )
+        # FACT (evidence): someone appeals to data that others could check
+        if not any(d.type == "FACT" for d in disagreements):
+            evid = {c.party_id for c in claims if re.search(r"\b(data|evidence|study|studies|shows|statistic|survey|\d+%)", c.text, re.I)}
+            if evid:
+                who = " and ".join(labels[i] for i in sorted(evid))
+                disagreements.append(
+                    Disagreement(
+                        type="FACT",
+                        summary=f"{who} point{'s' if len(evid) == 1 else ''} to evidence that the group could look at together.",
+                        party_ids=sorted(evid),
+                    )
+                )
+        # DEFINITION
+        defs = {c.party_id for c in claims if c.claim_type == "DEFINITION"}
+        if defs:
+            disagreements.append(
+                Disagreement(
+                    type="DEFINITION",
+                    summary="At least one key word is being defined explicitly; others may mean something different by it.",
+                    party_ids=sorted(defs),
                 )
             )
         # PREDICTION
@@ -306,7 +345,7 @@ class LocalEngine:
         return OptionsOut(options=opts)
 
     # ---------------- delegate draft ----------------
-    def draft_position(self, question: str, owner_name: str, positions: list[dict]) -> DraftOut:
+    def draft_position(self, question: str, owner_name: str, positions: list[dict], voice: str = "first") -> DraftOut:
         q_themes = themes_of(question)
         q_words = {w for w in re.findall(r"[a-z']{4,}", question.lower())} - STOPWORDS
         scored = []
@@ -323,20 +362,58 @@ class LocalEngine:
                 unknowns=[f"I don't know what {owner_name} thinks about this yet. None of their endorsed positions cover it, so please write it yourself."],
             )
         lines = []
+        third = voice == "third"
         for p in relevant:
             stance = p.get("stance")
             st = _strip_end(p["statement"])
+            why = ""
+            if third and ". Why: " in st:
+                st, reason = st.split(". Why: ", 1)
+                why = f" (in their words: \u201c{_strip_end(reason)}\u201d)"
+            if third:
+                st = st + why
             if stance == "disagree":
-                lines.append(f"I don't agree that {_lower_first(st)}.")
+                lines.append(f"{owner_name} doesn't agree that {_lower_first(st)}." if third else f"I don't agree that {_lower_first(st)}.")
             elif stance == "depends":
-                lines.append(f"It depends for me whether {_lower_first(st)}.")
+                lines.append(f"For {owner_name}, it depends whether {_lower_first(st)}." if third else f"It depends for me whether {_lower_first(st)}.")
             else:
-                lines.append(f"{st}.")
+                lines.append(f"{owner_name} holds that {_lower_first(st)}." if third else f"{st}.")
         return DraftOut(
             text=" ".join(lines),
             used_position_ids=[p["id"] for p in relevant],
             unknowns=["How strongly you feel about this specific case", "Anything specific to this situation"],
         )
+
+    def delegate_reply(self, question: str, owner_name: str, positions: list[dict], own_opening: str, others: list) -> ReplyOut:
+        """Reply to other Delegates' released openings, using only the owner's endorsed positions."""
+
+        def words(t: str) -> set[str]:
+            return set(re.findall(r"[a-z']{4,}", t.lower())) - STOPWORDS
+
+        # Prefer the owner's endorsed positions; fall back to the opening they released.
+        sources = positions or ([{"statement": own_opening, "stance": None}] if own_opening.strip() else [])
+        parts, unknowns = [], []
+        for o in others:
+            first = _strip_end(sentences(o.text)[0]) if sentences(o.text) else _strip_end(o.text)
+            scored = []
+            for p in sources:
+                score = len(words(p["statement"]) & words(o.text)) + 2 * len(themes_of(p["statement"]) & themes_of(o.text))
+                if score > 0:
+                    scored.append((score, p))
+            scored.sort(key=lambda x: -x[0])
+            if not scored:
+                parts.append(f"On {o.label}'s view (\u201c{first}\u201d), {owner_name} hasn't told me what they think. I'd need to ask them.")
+                unknowns.append(f"Your view on {o.label}'s point: \u201c{first}\u201d")
+                continue
+            views = []
+            for _, p in scored[:2]:
+                st = _strip_end(sentences(p["statement"])[0] if sentences(p["statement"]) else p["statement"])
+                if p.get("stance") == "disagree":
+                    views.append(f"{owner_name} has said they don't agree that {_lower_first(st)}")
+                else:
+                    views.append(f"{owner_name} has endorsed \u201c{st}\u201d")
+            parts.append(f"On {o.label}'s view (\u201c{first}\u201d): " + "; and ".join(views) + ".")
+        return ReplyOut(text=" ".join(parts), unknowns=unknowns)
 
     # ---------------- spar ----------------
     def spar_turn(self, claim: str, history: list[dict], mode: str, methodology: str) -> SparTurnOut:

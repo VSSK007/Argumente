@@ -257,3 +257,23 @@ class Report(Base):
     target_id: Mapped[str] = mapped_column(String)
     reason: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PreRoundTurn(Base):
+    """A Delegate's turn in the optional pre-round (ARGUMENTATIVE_INTELLIGENCE.md §3.2).
+
+    Drafted by the Delegate, visible only to its owner until the owner releases it. Released turns of
+    a phase become visible to everyone only once every participant has released or withdrawn theirs.
+    """
+
+    __tablename__ = "preround_turns"
+    __table_args__ = (UniqueConstraint("chamber_id", "owner_id", "kind"),)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("prt"))
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String)  # opening | reply
+    text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String, default="DRAFT")  # DRAFT | RELEASED | WITHDRAWN
+    authored_by: Mapped[str] = mapped_column(String, default="delegate")  # delegate | human
+    unknowns: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

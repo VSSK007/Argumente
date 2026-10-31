@@ -1,0 +1,18 @@
+{
+  "id": "savings_vs_trip",
+  "question": "Should we spend our savings on a big trip or keep them?",
+  "parties": [
+    {
+      "label": "Lena",
+      "text": "We should take the trip because we've been saying 'next year' for five years."
+    },
+    {
+      "label": "Paul",
+      "text": "Our emergency fund is only two months of expenses. I'd feel anxious spending it."
+    }
+  ],
+  "expected_types": [
+    "VALUE",
+    "INTEREST"
+  ]
+}

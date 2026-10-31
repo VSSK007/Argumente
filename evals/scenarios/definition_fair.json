@@ -1,0 +1,18 @@
+{
+  "id": "definition_fair",
+  "question": "Is splitting the bill equally fair?",
+  "parties": [
+    {
+      "label": "Ike",
+      "text": "Fair means everyone pays the same. Anything else is complicated and awkward."
+    },
+    {
+      "label": "Zoe",
+      "text": "By fair I mean proportional to what you ordered. I had a salad and you had steak."
+    }
+  ],
+  "expected_types": [
+    "DEFINITION",
+    "VALUE"
+  ]
+}
