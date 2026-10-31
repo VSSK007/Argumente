@@ -45,7 +45,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   await page.getByRole("button", { name: /Close: understood/ }).click();
   await page.getByText("Agree-to-disagree record").waitFor({ timeout: 10000 });
-  const box = page.locator("textarea").last();
+  const box = page.getByLabel("Agree-to-disagree record");
   await box.fill((await box.inputValue()) + "alternating who gets the big room each year, and reviewing in June.");
   await page.getByRole("button", { name: "Propose this record" }).click();
   await page.getByRole("button", { name: "Approve" }).click();

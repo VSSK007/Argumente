@@ -78,6 +78,21 @@ export default function Me() {
                 </Link>
               </div>
             </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!d.allow_rehearsal}
+                onChange={async (e) => setD({ ...(await api("/delegates/me", { method: "PATCH", body: { allow_rehearsal: e.target.checked } })), public_count: d.public_count, rehearsal_count: d.rehearsal_count })}
+              />
+              <span>
+                Let others rehearse conversations with my Delegate
+                <span className="block text-xs text-ink-2">
+                  It only ever uses your {d.public_count ?? 0} public position{d.public_count === 1 ? "" : "s"}, speaks about you in the third person, and you can turn this off any time.
+                  {d.rehearsal_count ? ` ${d.rehearsal_count} rehearsal${d.rehearsal_count === 1 ? "" : "s"} so far.` : ""}
+                </span>
+              </span>
+            </label>
             <p className="text-xs text-ink-2">Your Delegate can never approve agreements, endorse positions or consent to publishing. Only you can.</p>
           </Card>
         </section>

@@ -14,3 +14,4 @@ apps/web/next-env.d.ts
 # Local
 e2e/screenshots/
 evals/results/
+e2e/node_modules/

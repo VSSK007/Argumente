@@ -267,7 +267,7 @@ export function EngineBanner() {
   }, []);
   if (!status || status.provider !== "local") return null;
   return (
-    <div className="border-b hairline bg-engine-tint/60 px-4 py-1.5 text-center text-xs text-engine">
+    <div className="border-b hairline bg-engine-tint/60 px-4 py-1.5 text-center text-xs text-engine print:hidden">
       Offline engine: heuristic analysis that quotes people's own words. Set <span className="font-mono">ANTHROPIC_API_KEY</span> on the
       API for full AI analysis.
     </div>
@@ -287,7 +287,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { me } = useMe();
-  const isPublic = path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons");
+  const isPublic = path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design");
 
   useEffect(() => {
     if (me === null && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);
@@ -298,7 +298,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh pb-20 md:pb-0">
       <EngineBanner />
-      <header className="sticky top-0 z-20 border-b hairline bg-paper/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b hairline bg-paper/90 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <Link href="/" className="font-display text-xl tracking-tight">
             Argumenté
@@ -340,7 +340,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
       {me ? (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t hairline bg-paper md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t hairline bg-paper md:hidden print:hidden">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className={`py-3 text-center text-xs ${path === n.href ? "font-semibold text-ink" : "text-ink-2"}`}>
               {n.label}

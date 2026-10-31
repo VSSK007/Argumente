@@ -60,6 +60,13 @@ def scoped_positions(db: Session, delegate_id: str, chamber_id: str | None) -> l
     return list(db.scalars(stmt))
 
 
+def public_positions(db: Session, delegate_id: str) -> list[Position]:
+    """The ONLY path by which anyone other than the owner's own Delegate reads a person's positions
+    (e.g. rehearsals): ENDORSED and explicitly PUBLIC, nothing else."""
+    stmt = select(Position).where(Position.delegate_id == delegate_id, Position.status == "ENDORSED", Position.scope_type == "PUBLIC")
+    return list(db.scalars(stmt))
+
+
 def emit(db: Session, chamber_id: str, type_: str, actor_type: str, actor_id: str | None = None, **payload):
     db.add(ChamberEvent(chamber_id=chamber_id, type=type_, actor_type=actor_type, actor_id=actor_id, payload=payload))
 

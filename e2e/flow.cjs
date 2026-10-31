@@ -69,7 +69,7 @@ async function login(page, name, next = "") {
   await alice.getByRole("button", { name: "Ask the Mediator to read" }).click();
 
   // --- Restatement gate
-  await alice.getByText("Is this what you mean?").waitFor({ timeout: 20000 });
+  await alice.getByRole("heading", { name: "Is this what you mean?" }).waitFor({ timeout: 20000 });
   await alice.getByText("live", { exact: false }).first().waitFor({ timeout: 10000 });
   await shot(alice, "04-restatement-gate");
   await bob.reload();

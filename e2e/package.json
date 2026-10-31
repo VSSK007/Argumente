@@ -1,0 +1,14 @@
+{
+  "name": "argumente-e2e",
+  "private": true,
+  "description": "Browser tests. Install: npm install && npx playwright install chromium",
+  "scripts": {
+    "all": "node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node quality.cjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "playwright": "1.63.0",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0"
+  }
+}

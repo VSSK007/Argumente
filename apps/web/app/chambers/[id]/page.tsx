@@ -19,7 +19,9 @@ import {
   TextArea,
   TypeChip,
 } from "@/components/ui";
-import { MapView } from "@/components/MapView";
+import { MapView, type MapData } from "@/components/MapView";
+import { ArgumentGraph } from "@/components/chamber/ArgumentGraph";
+import { Timeline } from "@/components/chamber/Timeline";
 
 type Member = {
   user_id: string;
@@ -34,11 +36,16 @@ type Member = {
 export default function ChamberPage() {
   const { id } = useParams<{ id: string }>();
   const reloadRef = useRef<() => void>(() => {});
-  const live = useChamberStream(id, () => reloadRef.current());
+  const [tick, setTick] = useState(0);
+  const live = useChamberStream(id, () => {
+    reloadRef.current();
+    setTick((t) => t + 1);
+  });
   // With a live stream, polling is only a slow safety net.
   const { data: ch, setData, error: loadError, reload } = usePoll<any>(`/chambers/${id}`, live ? 20000 : 2000);
   reloadRef.current = reload;
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"now" | "map" | "graph" | "timeline">("now");
 
   async function act(path: string, body: unknown = {}) {
     setError(null);
@@ -46,6 +53,7 @@ export default function ChamberPage() {
       const v = await api(path, { body });
       if (v && v.id === id) setData(v);
       else setData(await api(`/chambers/${id}`));
+      setTick((t) => t + 1);
       return v;
     } catch (e: any) {
       setError(e.message);
@@ -53,15 +61,23 @@ export default function ChamberPage() {
   }
 
   if (loadError && !ch) return <ErrorNote error={loadError.message} />;
-  if (!ch) return <p className="text-ink-2">Loading…</p>;
+  if (!ch) return <ChamberSkeleton />;
 
   const me: Member = ch.members.find((m: Member) => m.is_me);
   const running = ch.run && ch.run.status === "RUNNING";
   const failed = ch.run && (ch.run.status === "FAILED" || (ch.run.status === "CANCELLED" && !ch.paused));
-  const nameOf = (uid: string) => ch.members.find((m: Member) => m.user_id === uid)?.name ?? "Someone";
+  const mapData = ch.map ? toMapData(ch) : null;
+  const hasGraph = ch.graph.nodes.length > 0;
+  const tabs = [
+    { key: "now", label: "Now" },
+    ...(mapData ? [{ key: "map", label: "Understanding Map" }] : []),
+    ...(hasGraph ? [{ key: "graph", label: "Argument graph" }] : []),
+    { key: "timeline", label: "Timeline" },
+  ] as const;
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : "now";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* -------- header */}
       <header className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -88,138 +104,278 @@ export default function ChamberPage() {
             <span className={live ? "text-agree" : ""}>●</span> {live ? "live" : "syncing"}
           </span>
         </div>
-        <Members members={ch.members} state={ch.state} />
+        <Members ch={ch} />
       </header>
+
+      <NowBanner ch={ch} me={me} running={!!running} onGo={activeTab !== "now" ? () => setTab("now") : undefined} />
+
+      <nav className="flex gap-1 overflow-x-auto border-b hairline print:hidden" role="tablist" aria-label="Chamber views">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={activeTab === t.key}
+            onClick={() => setTab(t.key as typeof tab)}
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+              activeTab === t.key ? "border-ink font-medium text-ink" : "border-transparent text-ink-2 hover:text-ink"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
       <ErrorNote error={error} />
 
-      {ch.lineage?.parent ? <ParentContext p={ch.lineage.parent} /> : null}
+      {activeTab === "now" ? (
+        <div className="space-y-8">
+          {ch.lineage?.parent ? <ParentContext p={ch.lineage.parent} act={act} /> : null}
 
-      {ch.engine_mode === "local-fallback" || ch.engine_mode === "mixed" ? (
-        <p className="rounded-md bg-engine-tint/60 px-3 py-2 text-xs text-engine">
-          Some of this analysis used the offline engine because a Claude API call failed (see the API logs). Results are more literal than usual.
-        </p>
-      ) : null}
+          {ch.engine_mode === "local-fallback" || ch.engine_mode === "mixed" ? (
+            <p className="rounded-md bg-engine-tint/60 px-3 py-2 text-xs text-engine">
+              Some of this analysis used the offline engine because a Claude API call failed (see the API logs). Results are more literal than usual.
+            </p>
+          ) : null}
 
-      {ch.safety ? <SafetyPanel s={ch.safety} onResume={() => act(`/chambers/${id}/resume`)} /> : null}
+          {ch.safety ? <SafetyPanel s={ch.safety} onResume={() => act(`/chambers/${id}/resume`)} /> : null}
 
-      {ch.paused && !ch.safety ? (
-        <Card className="border-ink">
-          <p className="font-display text-xl">This Chamber is paused{ch.paused_by ? ` by ${ch.paused_by}` : ""}.</p>
-          <p className="text-sm text-ink-2">Nothing moves forward until it’s resumed{ch.paused_by ? ` by ${ch.paused_by}` : ""}.</p>
-        </Card>
-      ) : null}
-
-      {running ? <EngineThinking step={ch.run.step} /> : null}
-      {failed ? (
-        <Card className="border-crux/50">
-          <p className="text-sm">
-            The Mediator couldn’t finish ({ch.run.status.toLowerCase()}){ch.run.error ? `: ${ch.run.error}` : ""}.
-          </p>
-          <Button className="mt-2" variant="secondary" onClick={() => act(`/chambers/${id}/advance`, { action: "retry" })}>
-            Retry
-          </Button>
-        </Card>
-      ) : null}
-
-      {/* -------- intake */}
-      {ch.state === "INTAKE" ? <Intake ch={ch} me={me} act={act} /> : null}
-
-      {/* -------- restatement gate */}
-      {ch.state === "RESTATEMENT" || ch.state === "MAPPING" ? <Restatements ch={ch} act={act} /> : null}
-
-      {/* -------- map and resolution */}
-      {ch.map ? (
-        <>
-          <MapView
-            map={{
-              headline: ch.map.headline,
-              summary: ch.map.summary,
-              stands: ch.map.where_you_stand.map((w: any) => ({
-                label: nameOf(w.party_id),
-                text: w.text,
-                written_by: ch.restatements.find((r: any) => r.id === w.restatement_id)?.written_by,
-              })),
-              shared: ch.map.shared,
-              differences: ch.map.differences,
-              cruxes: ch.map.cruxes.map((c: any) => ({ label: nameOf(c.party_id), text: c.text, confirmed: c.confirmed })),
-              open_questions: ch.map.open_questions,
-            }}
-          />
-          <InterpretationDiff ch={ch} />
-          <GraphDetails ch={ch} />
-          {ch.state === "MAP" && !ch.paused ? (
-            <Card className="mx-auto max-w-[720px]">
-              <SectionTitle kicker="What next?">You understand each other. Now what?</SectionTitle>
-              <p className="text-sm text-ink-2">
-                Disagreeing is a legitimate outcome. You can close the Chamber as understood, or ask the Mediator for options that
-                serve everyone’s stakes.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={() => act(`/chambers/${id}/advance`, { action: "explore_options" })}>Explore options</Button>
-                <Button variant="secondary" onClick={() => act(`/chambers/${id}/advance`, { action: "close_understood" })}>
-                  Close: understood, still disagree
-                </Button>
-              </div>
+          {ch.paused && !ch.safety ? (
+            <Card className="border-ink">
+              <p className="font-display text-xl">This Chamber is paused{ch.paused_by ? ` by ${ch.paused_by}` : ""}.</p>
+              <p className="text-sm text-ink-2">Nothing moves forward until it’s resumed{ch.paused_by ? ` by ${ch.paused_by}` : ""}.</p>
             </Card>
           ) : null}
+
+          {running ? <EngineThinking step={ch.run.step} /> : null}
+          {failed ? (
+            <Card className="border-crux/50">
+              <p className="text-sm">
+                The Mediator couldn’t finish ({ch.run.status.toLowerCase()}){ch.run.error ? `: ${ch.run.error}` : ""}.
+              </p>
+              <Button className="mt-2" variant="secondary" onClick={() => act(`/chambers/${id}/advance`, { action: "retry" })}>
+                Retry
+              </Button>
+            </Card>
+          ) : null}
+
+          {ch.state === "INTAKE" ? <Intake ch={ch} me={me} act={act} /> : null}
+          {ch.state === "RESTATEMENT" || ch.state === "MAPPING" ? <Restatements ch={ch} act={act} /> : null}
+
+          {ch.state === "MAP" && mapData ? (
+            <>
+              <MapView map={mapData} />
+              <InterpretationDiff ch={ch} />
+              {!ch.paused ? (
+                <Card className="mx-auto max-w-[720px]">
+                  <SectionTitle kicker="What next?">You understand each other. Now what?</SectionTitle>
+                  <p className="text-sm text-ink-2">
+                    Disagreeing is a legitimate outcome. You can close the Chamber as understood, or ask the Mediator for options that
+                    serve everyone’s stakes.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button onClick={() => act(`/chambers/${id}/advance`, { action: "explore_options" })}>Explore options</Button>
+                    <Button variant="secondary" onClick={() => act(`/chambers/${id}/advance`, { action: "close_understood" })}>
+                      Close: understood, still disagree
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
+            </>
+          ) : null}
+
           {ch.state === "RESOLUTION" ? <Resolution ch={ch} act={act} /> : null}
-        </>
-      ) : null}
 
-      {ch.state === "CLOSED" ? (
-        <Card className="mx-auto max-w-[720px]">
-          <div className="label-mono text-ink-2">Closed</div>
-          <p className="font-display text-2xl">
-            {ch.closed_state === "AGREED"
-              ? "Agreed, and approved by everyone."
-              : ch.closed_state === "UNDERSTOOD"
-                ? "Understood each other. Still disagree, and that’s allowed."
-                : "Abandoned."}
-          </p>
-          {ch.agreement.items.some((i: any) => i.kind === "agreement") ? <AgreementList ch={ch} act={act} readOnly /> : null}
-          {ch.closed_state === "UNDERSTOOD" && !ch.retention?.purged ? <UnderstandingRecord ch={ch} act={act} /> : null}
-          <Lineage ch={ch} />
-          <Retention ch={ch} act={act} />
-        </Card>
-      ) : null}
+          {ch.state === "CLOSED" ? (
+            <Card className="mx-auto max-w-[720px]">
+              <div className="label-mono text-ink-2">Closed</div>
+              <p className="font-display text-2xl">
+                {ch.closed_state === "AGREED"
+                  ? "Agreed, and approved by everyone."
+                  : ch.closed_state === "UNDERSTOOD"
+                    ? "Understood each other. Still disagree, and that’s allowed."
+                    : "Abandoned."}
+              </p>
+              {mapData ? (
+                <button className="mt-1 text-sm underline" onClick={() => setTab("map")}>
+                  Read the Understanding Map
+                </button>
+              ) : null}
+              {ch.agreement.items.some((i: any) => i.kind === "agreement") ? <AgreementList ch={ch} act={act} readOnly /> : null}
+              {ch.closed_state === "UNDERSTOOD" && !ch.retention?.purged ? <UnderstandingRecord ch={ch} act={act} /> : null}
+              {ch.closed_state !== "ABANDONED" ? <Prediction ch={ch} act={act} /> : null}
+              <Lineage ch={ch} />
+              <Retention ch={ch} act={act} />
+            </Card>
+          ) : null}
 
-      {ch.map ? <Publish ch={ch} act={act} /> : null}
+          {ch.map && ch.state === "CLOSED" ? <Publish ch={ch} act={act} /> : null}
 
-      {ch.state === "INTAKE" && ch.is_creator ? (
-        <div className="text-right">
-          <button className="text-xs text-ink-2 underline" onClick={() => act(`/chambers/${id}/advance`, { action: "abandon" })}>
-            Abandon this Chamber
-          </button>
+          {ch.state === "INTAKE" && ch.is_creator ? (
+            <div className="text-right">
+              <button className="text-xs text-ink-2 underline" onClick={() => act(`/chambers/${id}/advance`, { action: "abandon" })}>
+                Abandon this Chamber
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      <Record events={ch.events} />
+      {activeTab === "map" && mapData ? (
+        <div className="space-y-8">
+          <MapView map={mapData} />
+          <InterpretationDiff ch={ch} />
+          {ch.state !== "CLOSED" ? <Publish ch={ch} act={act} /> : null}
+          <div className="text-center">
+            <button className="text-sm underline" onClick={() => window.print()}>
+              Print or save as PDF
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "graph" ? (
+        <div className="space-y-4">
+          <ArgumentGraph
+            nodes={ch.graph.nodes}
+            people={ch.members.map((m: Member) => ({ user_id: m.user_id, name: m.name }))}
+            cruxes={ch.cruxes}
+          />
+          <GraphDetails ch={ch} />
+        </div>
+      ) : null}
+
+      {activeTab === "timeline" ? <Timeline chamberId={ch.id} refreshKey={tick} /> : null}
+    </div>
+  );
+}
+
+function toMapData(ch: any): MapData {
+  const nameOf = (uid: string) => ch.members.find((m: Member) => m.user_id === uid)?.name ?? "Someone";
+  return {
+    headline: ch.map.headline,
+    summary: ch.map.summary,
+    stands: ch.map.where_you_stand.map((w: any) => ({
+      label: nameOf(w.party_id),
+      text: w.text,
+      written_by: ch.restatements.find((r: any) => r.id === w.restatement_id)?.written_by,
+    })),
+    shared: ch.map.shared,
+    differences: ch.map.differences,
+    cruxes: ch.map.cruxes.map((c: any) => ({ label: nameOf(c.party_id), text: c.text, confirmed: c.confirmed })),
+    open_questions: ch.map.open_questions,
+  };
+}
+
+function ChamberSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-busy="true" aria-label="Loading Chamber">
+      <div className="h-3 w-32 rounded bg-paper-2" />
+      <div className="h-9 w-2/3 rounded bg-paper-2" />
+      <div className="h-4 w-1/2 rounded bg-paper-2" />
+      <div className="h-6 w-80 rounded-full bg-paper-2" />
+      <div className="h-40 rounded-lg bg-paper-2" />
+    </div>
+  );
+}
+
+/** One sentence that tells *this* person what the Chamber needs from them right now. */
+function NowBanner({ ch, me, running, onGo }: { ch: any; me: Member; running: boolean; onGo?: () => void }) {
+  const waitingOn = (ids: string[]) =>
+    ch.members
+      .filter((m: Member) => !ids.includes(m.user_id))
+      .map((m: Member) => (m.is_me ? "you" : m.name))
+      .join(", ");
+  let title = "";
+  let detail = "";
+  let mine = false;
+  const endorsed = ch.members.filter((m: Member) => m.intake_status === "ENDORSED").map((m: Member) => m.user_id);
+  if (ch.paused) {
+    title = "Paused";
+    detail = ch.safety ? "Only you can see why. Take whatever time you need." : `Nothing moves until ${ch.paused_by ?? "it’s"} resumed.`;
+  } else if (running) {
+    title = "The Mediator is reading";
+    detail = ch.run.step && ch.run.step !== "queued" ? ch.run.step : "This usually takes a few seconds.";
+  } else if (ch.state === "INTAKE") {
+    if (ch.members.length < 2) [title, detail] = ["Invite the people involved", "Share the invite link. A Chamber needs at least two people."];
+    else if (me.intake_status !== "ENDORSED") [title, detail, mine] = ["Your turn: say where you stand", "Privately. Nobody sees your exact words.", true];
+    else if (endorsed.length < ch.members.length) [title, detail] = ["Waiting for positions", `Still writing: ${waitingOn(endorsed)}.`];
+    else [title, detail, mine] = ["Everyone’s ready", "Ask the Mediator to read all positions.", true];
+  } else if (ch.state === "RESTATEMENT") {
+    const mineR = ch.restatements.find((r: any) => r.is_mine);
+    const accepted = ch.restatements.filter((r: any) => r.status === "ACCEPTED").map((r: any) => r.of_user_id);
+    if (mineR && mineR.status === "PENDING") [title, detail, mine] = ["Your turn: is this what you mean?", "Check how the Mediator explained your view to the group.", true];
+    else [title, detail] = ["Waiting at the Restatement Gate", `Still checking: ${waitingOn(accepted) || "nobody"}.`];
+  } else if (ch.state === "MAP") {
+    [title, detail, mine] = ["The Understanding Map is ready", "Read it together, then decide: close as understood, or explore options.", true];
+  } else if (ch.state === "RESOLUTION") {
+    const ranked = ch.ranking?.ranked_user_ids ?? [];
+    if (ch.options.length && !ch.ranking?.complete && !ranked.includes(me.user_id)) [title, detail, mine] = ["Your turn: rank the options", "Privately. Only the combined result is shown.", true];
+    else if (ch.options.length && !ch.ranking?.complete) [title, detail] = ["Waiting for rankings", `Still ranking: ${waitingOn(ranked)}.`];
+    else {
+      const pending = ch.agreement.items.filter((i: any) => i.kind === "agreement" && !i.my_decision);
+      if (pending.length) [title, detail, mine] = ["Your turn: review the agreement", `${pending.length} item${pending.length > 1 ? "s" : ""} need your decision.`, true];
+      else [title, detail] = ["Shape the agreement", "Propose items. Each person approves each one."];
+    }
+  } else if (ch.state === "CLOSED") {
+    [title, detail] = [
+      ch.closed_state === "AGREED" ? "Agreed" : ch.closed_state === "UNDERSTOOD" ? "Understood, still disagree" : "Abandoned",
+      ch.retention?.purged ? "Private content has been deleted." : "The record stays here. You can revisit it any time.",
+    ];
+  } else {
+    [title, detail] = ["Working…", ""];
+  }
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`flex w-full items-center justify-between gap-4 rounded-lg border px-4 py-3 print:hidden ${
+        mine ? "border-ink bg-white shadow-sm" : "hairline bg-white/50"
+      }`}
+    >
+      <div>
+        <span className={`label-mono ${mine ? "text-delegate" : "text-ink-2"}`}>{mine ? "Needs you" : "Now"}</span>
+        <span className="block font-display text-xl leading-tight">{title}</span>
+        {detail ? <span className="block text-sm text-ink-2">{detail}</span> : null}
+      </div>
+      {onGo ? (
+        <Button variant={mine ? "primary" : "quiet"} onClick={onGo}>
+          Go →
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 /* ================================================================= members */
 
-function Members({ members, state }: { members: Member[]; state: string }) {
+function Members({ ch }: { ch: any }) {
+  const status = (m: Member): [string, boolean] => {
+    if (ch.state === "INTAKE") return m.intake_status === "ENDORSED" ? ["✓ ready", true] : ["writing…", false];
+    if (ch.state === "RESTATEMENT") {
+      const r = ch.restatements.find((x: any) => x.of_user_id === m.user_id);
+      return r?.status === "ACCEPTED" ? ["✓ understood", true] : ["checking…", false];
+    }
+    if (ch.state === "RESOLUTION" && ch.options.length && !ch.ranking?.complete)
+      return ch.ranking?.ranked_user_ids.includes(m.user_id) ? ["✓ ranked", true] : ["ranking…", false];
+    return ["", false];
+  };
   return (
-    <div className="flex flex-wrap gap-3">
-      {members.map((m) => (
-        <div key={m.user_id} className="flex items-center gap-2 rounded-full border hairline bg-white/70 py-1 pl-1 pr-3">
-          <HumanAvatar name={m.name} size={26} />
-          {m.delegate ? <Glyph seed={m.delegate.glyph_seed} size={20} /> : null}
-          <span className="text-sm">
-            {m.name}
-            {m.is_me ? <span className="text-ink-2"> (you)</span> : null}
-          </span>
-          {state === "INTAKE" ? (
-            <span className={`label-mono ${m.intake_status === "ENDORSED" ? "text-agree" : "text-ink-2"}`}>
-              {m.intake_status === "ENDORSED" ? "✓ ready" : "writing…"}
+    <ul className="flex flex-wrap gap-2" aria-label="People in this Chamber">
+      {ch.members.map((m: Member) => {
+        const [label, done] = status(m);
+        return (
+          <li key={m.user_id} className="flex items-center gap-2 rounded-full border hairline bg-white/70 py-1 pl-1 pr-3">
+            <HumanAvatar name={m.name} size={26} />
+            {m.delegate ? <Glyph seed={m.delegate.glyph_seed} size={20} /> : null}
+            <span className="text-sm">
+              {m.name}
+              {m.is_me ? <span className="text-ink-2"> (you)</span> : null}
             </span>
-          ) : null}
-        </div>
-      ))}
-    </div>
+            {label ? <span className={`label-mono ${done ? "text-agree" : "text-ink-2"}`}>{label}</span> : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -668,24 +824,7 @@ function Resolution({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Pro
   const [text, setText] = useState("");
   return (
     <section className="mx-auto max-w-[720px] space-y-6">
-      <SectionTitle kicker="Resolution">Options</SectionTitle>
-      <div className="space-y-3">
-        {ch.options.map((o: any, i: number) => (
-          <Card key={i}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <MediatorBadge />
-                <div className="mt-2 font-display text-xl">{o.title}</div>
-                <p className="prose-body mt-1">{o.description}</p>
-                <p className="mt-1 text-sm text-ink-2">Trade-offs: {o.trade_offs}</p>
-              </div>
-            </div>
-            <Button variant="quiet" className="mt-3" disabled={ch.paused} onClick={() => act(`/chambers/${ch.id}/agreement/items`, { text: `${o.title}: ${o.description}`, from_option: true })}>
-              Propose as an agreement item
-            </Button>
-          </Card>
-        ))}
-      </div>
+      {ch.options.length ? <Ranking ch={ch} act={act} /> : null}
 
       <Card>
         <SectionTitle kicker="Agreement · nothing binds until everyone approves each item">What you’re agreeing to</SectionTitle>
@@ -709,6 +848,101 @@ function Resolution({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Pro
         </div>
       </Card>
     </section>
+  );
+}
+
+/** Private ranking of the Mediator's options. Only the combined (Borda) result is ever shown. */
+function Ranking({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  const r = ch.ranking;
+  const [order, setOrder] = useState<number[]>(r.mine ?? ch.options.map((_: any, i: number) => i));
+  const move = (pos: number, d: -1 | 1) => {
+    const next = [...order];
+    const j = pos + d;
+    if (j < 0 || j >= next.length) return;
+    [next[pos], next[j]] = [next[j], next[pos]];
+    setOrder(next);
+  };
+  const others = ch.members.filter((m: Member) => !r.ranked_user_ids.includes(m.user_id)).map((m: Member) => (m.is_me ? "you" : m.name));
+
+  if (r.complete) {
+    const top = r.results[0];
+    return (
+      <Card>
+        <SectionTitle kicker="Everyone has ranked · individual rankings stay private">How the options landed</SectionTitle>
+        <ol className="space-y-4">
+          {r.results.map((res: any, i: number) => {
+            const o = ch.options[res.index];
+            const pct = res.max_points ? Math.round((res.points / res.max_points) * 100) : 0;
+            return (
+              <li key={res.index}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-display text-lg">
+                    {i + 1}. {o.title}
+                  </span>
+                  <span className="label-mono shrink-0 text-ink-2">
+                    {res.first_choices} first · {res.last_choices} last
+                  </span>
+                </div>
+                <div className="mt-1 h-2 rounded-full bg-paper-2" role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${o.title}: ${pct}% of possible support`}>
+                  <div className="h-2 rounded-full bg-ink" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="prose-body mt-1 text-sm text-ink-2">{o.description}</p>
+                <Button
+                  variant={res === top ? "primary" : "quiet"}
+                  className="mt-2"
+                  disabled={ch.paused}
+                  onClick={() => act(`/chambers/${ch.id}/agreement/items`, { text: `${o.title}: ${o.description}`, from_option: true })}
+                >
+                  Propose as an agreement item
+                </Button>
+              </li>
+            );
+          })}
+        </ol>
+        {top && top.last_choices > 0 ? (
+          <p className="mt-4 text-sm text-engine">
+            Note: the top option is someone’s last choice. An agreement everyone can live with may beat the highest score.
+          </p>
+        ) : null}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <SectionTitle kicker="Private · only the combined result is shown">Rank the Mediator’s options</SectionTitle>
+      <p className="mb-3 text-sm text-ink-2">Put the option you could best live with first. You can change your ranking until everyone has ranked.</p>
+      <ol className="space-y-2">
+        {order.map((oi, pos) => {
+          const o = ch.options[oi];
+          return (
+            <li key={oi} className="flex items-start gap-3 rounded-md border hairline bg-white p-3">
+              <span className="font-display w-6 text-xl text-ink-2">{pos + 1}</span>
+              <div className="flex-1">
+                <MediatorBadge />
+                <div className="mt-1 font-display text-lg">{o.title}</div>
+                <p className="prose-body text-sm">{o.description}</p>
+                <p className="mt-1 text-xs text-ink-2">Trade-offs: {o.trade_offs}</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button className="rounded border hairline px-2 text-sm disabled:opacity-30" disabled={pos === 0} onClick={() => move(pos, -1)} aria-label={`Move ${o.title} up`}>
+                  ↑
+                </button>
+                <button className="rounded border hairline px-2 text-sm disabled:opacity-30" disabled={pos === order.length - 1} onClick={() => move(pos, 1)} aria-label={`Move ${o.title} down`}>
+                  ↓
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button disabled={ch.paused} onClick={() => act(`/chambers/${ch.id}/ranking`, { order })}>
+          {r.mine ? "Update my ranking" : "Submit my ranking"}
+        </Button>
+        <span className="text-sm text-ink-2">{others.length ? `Waiting for: ${others.join(", ")}` : ""}</span>
+      </div>
+    </Card>
   );
 }
 
@@ -781,7 +1015,7 @@ function UnderstandingRecord({ ch, act }: { ch: any; act: (p: string, b?: unknow
         separately; nothing is pre-approved.
       </p>
       {has ? <AgreementList ch={ch} act={act} kind="understanding" /> : null}
-      <TextArea rows={3} className="mt-3" value={text} onChange={(e) => setText(e.target.value)} />
+      <TextArea rows={3} className="mt-3" aria-label="Agree-to-disagree record" value={text} onChange={(e) => setText(e.target.value)} />
       <Button
         className="mt-2"
         variant="quiet"
@@ -840,7 +1074,102 @@ function Lineage({ ch }: { ch: any }) {
   );
 }
 
-function ParentContext({ p }: { p: any }) {
+/** Decision Replay: seal a prediction at close; it's revealed and reviewed when the Chamber is revisited. */
+function Prediction({ ch, act }: { ch: any; act: (p: string, b?: unknown) => Promise<any> }) {
+  const pr = ch.predictions;
+  const [text, setText] = useState(pr?.mine?.text ?? "");
+  const [conf, setConf] = useState<number>(pr?.mine?.confidence ?? 60);
+  const [editing, setEditing] = useState(!pr?.mine);
+  if (!pr || ch.retention?.purged) return null;
+  if (!pr.sealed) {
+    return (
+      <div className="mt-5 border-t hairline pt-4">
+        <div className="label-mono text-ink-2">Decision Replay · unsealed</div>
+        <PredictionList preds={pr.all ?? []} />
+        {pr.mine && !pr.mine.verdict ? <ReviewPrediction chamberId={ch.id} act={act} /> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-5 border-t hairline pt-4">
+      <div className="label-mono text-ink-2">Decision Replay · sealed until you revisit</div>
+      <p className="mt-1 text-sm text-ink-2">
+        What do you expect will actually happen? Nobody sees predictions until this Chamber is revisited; then you compare notes.
+        {pr.count ? ` ${pr.count} sealed so far.` : ""}
+      </p>
+      {editing ? (
+        <>
+          <TextArea rows={2} className="mt-2" aria-label="Your prediction" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. “We’ll stick to the rota for about a month, then slip.”" />
+          <label className="mt-2 flex items-center gap-3 text-sm">
+            How sure? <input type="range" min={0} max={100} step={5} value={conf} onChange={(e) => setConf(Number(e.target.value))} className="flex-1 accent-[#1A1A1A]" aria-label="Confidence" />
+            <span className="w-10 font-mono text-xs">{conf}%</span>
+          </label>
+          <Button
+            className="mt-2"
+            variant="quiet"
+            disabled={text.trim().length < 5}
+            onClick={async () => {
+              await act(`/chambers/${ch.id}/prediction`, { text, confidence: conf });
+              setEditing(false);
+            }}
+          >
+            Seal my prediction
+          </Button>
+        </>
+      ) : (
+        <p className="mt-2 text-sm">
+          🔒 Your sealed prediction: <em>“{pr.mine?.text}”</em> ({pr.mine?.confidence}% sure){" "}
+          <button className="text-xs underline" onClick={() => setEditing(true)}>
+            change
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PredictionList({ preds }: { preds: any[] }) {
+  if (!preds.length) return <p className="mt-1 text-sm text-ink-2">Nobody sealed a prediction.</p>;
+  const V: Record<string, string> = { right: "✓ turned out right", partly: "≈ partly right", wrong: "✕ turned out wrong" };
+  return (
+    <ul className="mt-2 space-y-2">
+      {preds.map((p) => (
+        <li key={p.id} className="text-sm">
+          <strong>{p.name}</strong> predicted <em>“{p.text}”</em> <span className="text-ink-2">({p.confidence}% sure)</span>
+          {p.verdict ? (
+            <span className="ml-2 label-mono text-ink-2">
+              {V[p.verdict]}
+              {p.review_note ? `: ${p.review_note}` : ""}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReviewPrediction({ chamberId, act }: { chamberId: string; act: (p: string, b?: unknown) => Promise<any> }) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="mt-3 rounded-md bg-paper-2 p-3 text-sm">
+      Looking back, how did your prediction hold up?
+      <TextArea rows={1} className="mt-2" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note" />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {[
+          ["right", "Turned out right"],
+          ["partly", "Partly"],
+          ["wrong", "Turned out wrong"],
+        ].map(([v, l]) => (
+          <Button key={v} variant="quiet" onClick={() => act(`/chambers/${chamberId}/prediction/review`, { verdict: v, note })}>
+            {l}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ParentContext({ p, act }: { p: any; act: (p: string, b?: unknown) => Promise<any> }) {
   return (
     <Card className="border-delegate/40 bg-delegate-tint/30">
       <div className="label-mono text-ink-2">Revisiting</div>
@@ -864,6 +1193,13 @@ function ParentContext({ p }: { p: any }) {
       ) : (
         <p className="mt-1 text-sm text-ink-2">Nothing was formally agreed last time.</p>
       )}
+      {p.predictions && !p.predictions.sealed && p.predictions.all?.length ? (
+        <div className="mt-3 border-t hairline pt-3">
+          <div className="label-mono text-ink-2">Decision Replay: what you each expected</div>
+          <PredictionList preds={p.predictions.all} />
+          {p.predictions.mine && !p.predictions.mine.verdict ? <ReviewPrediction chamberId={p.id} act={act} /> : null}
+        </div>
+      ) : null}
       <p className="mt-2 text-xs text-ink-2">Positions start fresh: what you think now may differ from then, and that’s the point.</p>
     </Card>
   );
@@ -966,66 +1302,5 @@ function SafetyPanel({ s, onResume }: { s: any; onResume: () => void }) {
         I’m safe. Resume the Chamber.
       </Button>
     </Card>
-  );
-}
-
-const EVENT_LABEL: Record<string, string> = {
-  "chamber.created": "created the Chamber",
-  "member.joined": "joined",
-  "position.endorsed": "endorsed their position",
-  "position.drafted": "got a Delegate draft",
-  "state.changed": "moved the Chamber on",
-  "engine.run.started": "Mediator started",
-  "engine.run.completed": "Mediator finished",
-  "engine.run.failed": "Mediator failed",
-  "engine.run.cancelled": "Mediator stopped (paused)",
-  "restatement.accepted": "accepted how their view was explained",
-  "restatement.rejected": "asked for a revision",
-  "restatement.created": "Mediator revised a restatement",
-  "gate.passed": "Restatement gate passed",
-  "map.generated": "Understanding Map drawn",
-  "chamber.paused": "paused",
-  "chamber.resumed": "resumed",
-  "crux.confirmed": "confirmed a crux",
-  "crux.rejected": "rejected a crux",
-  "agreement.item.proposed": "proposed an agreement item",
-  "agreement.item.approved": "approved an item",
-  "agreement.item.rejected": "rejected an item",
-  "chamber.closed": "closed the Chamber",
-  "publication.consent.granted": "consented to publish",
-  "publication.consent.revoked": "withdrew publishing consent",
-  "publication.published": "Map published",
-  "retention.extended": "extended how long this Chamber is kept",
-  "chamber.purged": "Private content deleted (retention)",
-  "chamber.revisited": "started a revisit of this Chamber",
-  "preround.started": "started a Delegate pre-round",
-  "preround.openings.drafted": "Delegates drafted openings",
-  "preround.replies.drafted": "Delegates drafted replies",
-  "preround.opening.released": "released their Delegate's opening",
-  "preround.reply.released": "released their Delegate's reply",
-  "preround.opening.withdrawn": "withdrew their Delegate's opening",
-  "preround.reply.withdrawn": "withdrew their Delegate's reply",
-  "preround.openings.revealed": "Openings revealed to everyone",
-  "preround.replies.revealed": "Replies revealed to everyone",
-};
-
-function Record({ events }: { events: any[] }) {
-  return (
-    <details className="rounded-lg border hairline p-4">
-      <summary className="cursor-pointer text-sm text-ink-2">Record ({events.length} recent events)</summary>
-      <ul className="mt-3 space-y-1 text-sm">
-        {events.map((e) => (
-          <li key={e.id} className="flex gap-3">
-            <span className="w-20 shrink-0 font-mono text-xs text-ink-2">{new Date(e.at).toLocaleTimeString()}</span>
-            <span>
-              {e.actor_type === "engine" ? "§ " : e.actor_type === "delegate" ? "◆ " : ""}
-              {e.actor_name ? <strong>{e.actor_name} </strong> : null}
-              {EVENT_LABEL[e.type] ?? e.type}
-              {e.payload?.state ? ` → ${e.payload.state.toLowerCase()}` : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..auth import current_user, human_user
 from ..cards import CARDS
 from ..db import get_db, now
-from ..models import Delegate, Position, User
+from ..models import Delegate, Position, SparSession, User
 
 router = APIRouter(tags=["delegates"])
 
@@ -32,6 +32,7 @@ def delegate_out(d: Delegate) -> dict:
         "methodology": d.methodology,
         "autonomy": d.autonomy,
         "status": d.status,
+        "allow_rehearsal": bool(d.allow_rehearsal),
         "owner": {"id": d.owner.id, "name": d.owner.name},
     }
 
@@ -133,7 +134,9 @@ def create_delegate(body: DelegateIn, user: User = Depends(human_user), db: Sess
 def get_my_delegate(user: User = Depends(current_user), db: Session = Depends(get_db)):
     d = _my_delegate(user, db)
     count = len(list(db.scalars(select(Position.id).where(Position.delegate_id == d.id, Position.status == "ENDORSED"))))
-    return {**delegate_out(d), "endorsed_count": count}
+    rehearsals = len(list(db.scalars(select(SparSession.id).where(SparSession.target_delegate_id == d.id))))
+    public = len(list(db.scalars(select(Position.id).where(Position.delegate_id == d.id, Position.status == "ENDORSED", Position.scope_type == "PUBLIC"))))
+    return {**delegate_out(d), "endorsed_count": count, "public_count": public, "rehearsal_count": rehearsals}
 
 
 class DelegatePatch(BaseModel):
@@ -142,6 +145,7 @@ class DelegatePatch(BaseModel):
     methodology: str | None = None
     autonomy: str | None = Field(default=None, pattern="^(L0|L1)$")  # L2/L3 deferred (D20)
     status: str | None = Field(default=None, pattern="^(ACTIVE|PAUSED)$")
+    allow_rehearsal: bool | None = None
 
 
 @router.patch("/delegates/me")
@@ -281,14 +285,15 @@ def public_profile(handle: str, db: Session = Depends(get_db)):
     d = db.scalar(select(Delegate).where(Delegate.handle == handle))
     if not d:
         raise HTTPException(404, {"code": "NOT_FOUND", "message": "No Delegate with that handle."})
-    public = db.scalars(
-        select(Position).where(Position.delegate_id == d.id, Position.scope_type == "PUBLIC", Position.status == "ENDORSED")
-    )
+    from ..protocol import public_positions
+
+    public = public_positions(db, d.id)
     return {
         "handle": d.handle,
         "name": d.name,
         "glyph_seed": d.glyph_seed,
         "methodology": d.methodology,
         "owner_name": d.owner.name,
+        "allow_rehearsal": bool(d.allow_rehearsal),
         "public_positions": [position_out(p) for p in public],
     }

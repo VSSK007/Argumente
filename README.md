@@ -27,6 +27,14 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 Then restart. If a Claude call fails (bad key, network, refusal), that step falls back to the offline engine and the Chamber tells you.
 
+### Or with Docker (Postgres, production build)
+
+```bash
+docker compose up --build        # http://localhost:3000 · API on :8000 · Postgres in a volume
+```
+
+Put `ANTHROPIC_API_KEY=...` in a `.env` file next to `docker-compose.yml` to use Claude. Behind a TLS-inspecting corporate proxy, build with your CA: `docker compose build --secret id=ca,src=/path/to/ca.crt` (or `docker build --secret …` per image). The web image downloads its fonts at build time, so the build needs to reach Google Fonts. Users' browsers never do.
+
 ### Trying a multi-person Chamber on one machine
 Sign in is local-dev only (name + email, no password). Open a second browser profile or a private window to be a second person. The login page lists existing local accounts for quick switching. With `--seed`, you get `priya@demo.local`, `sam@demo.local` and `dev@demo.local`, a Chamber already at its Understanding Map, and a published Map in the Commons.
 
@@ -42,9 +50,13 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | **Restatement Gate** | Each person must accept how their view was explained ("Not quite" → revision, max 3, then write it yourself) before anything else unlocks |
 | Understanding Map | Where each person stands (only accepted restatements), shared ground, typed differences, cruxes, questions |
 | Interpretation Diff | For "same events, different meaning" disagreements: each person's observations next to their interpretations (endorsed words only) |
-| Options & Agreement | Mediator options, per-item approval by every person, nothing pre-approved |
+| Options & Agreement | Mediator options, **ranked privately** by each person (only the combined Borda result is shown, once everyone has ranked, then locked), then per-item approval by every person, nothing pre-approved |
 | Agree-to-disagree record | When a Chamber closes as understood, people co-sign how they'll live with the remaining difference (each approves separately) |
 | Revisit | Reopen a closed Chamber as a new one with the same people. Those who were in the original see what was agreed last time; newcomers don't. |
+| Decision Replay | At close, each person seals a prediction ("what will actually happen?") with a confidence. Predictions stay sealed until the Chamber is revisited, then everyone's are shown side by side and each person marks theirs right, partly right, or wrong. |
+| Rehearsal Room | Practise a hard conversation against someone's Delegate, if they've opted in. It uses only their **public** positions, speaks about them in the third person, and says plainly what it doesn't know. Owners see a rehearsal count, never the content. |
+| Chamber layout | A "Now" banner says what the Chamber needs from you. Tabs for **Now**, **Understanding Map** (printable), **Argument graph** (interactive SVG: shared ground, typed differences, each person's claims, cruxes and inferences; text version underneath) and **Timeline** (the full record grouped by stage). Live presence shows who's ready, understood or ranked. |
+| Design gallery | `/design` shows every component with fixed sample data. It's also the reference page for screenshot comparisons. |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
 | Safety | Abuse/coercion/self-harm screening → private resources + quiet pause |
 | Publishing | Needs every participant's consent, anonymized by default, revocable → `/commons`, `/m/<slug>` |
@@ -58,12 +70,19 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 24 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 27 API tests incl. the safety invariants and the eval gate
+TEST_DATABASE_URL=postgresql+psycopg://user@host/db uv run pytest   # same suite on Postgres
+cd e2e && npm install && npx playwright install chromium   # once
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
 node e2e/preround.cjs                      # browser E2E: Delegate pre-round
 node e2e/lineage.cjs                       # browser E2E: agree-to-disagree record + revisit, live updates
+node e2e/features.cjs                      # browser E2E: tabs, private ranking, Decision Replay, Rehearsal Room
+node e2e/quality.cjs                       # accessibility (axe, WCAG 2.2 AA) on every page + /design screenshot comparison
+PERF_BUDGET=1 node e2e/quality.cjs         # …plus a 350 KB JavaScript budget (run against a production build)
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
 ```
+
+CI (`.github/workflows/ci.yml`) runs the API tests on SQLite and Postgres, the offline Mediator eval, a web typecheck and production build, all browser flows, and the quality gate on every push. Screenshot differences only warn in CI, because GitHub's machines may render fonts slightly differently from the Linux machine that made the baselines (`UPDATE_BASELINES=1 node e2e/quality.cjs` refreshes them).
 
 ### Mediator evals
 `evals/scenarios/` holds 10 disagreements (trips, couples, chores, rent, family, work, money, definitions). `evals/run.py` scores fabricated or misattributed quotes (target 0), coverage, disagreement-type recall and restatement balance for whichever engine is configured, so you can compare the offline engine against Claude once you add a key. The offline baseline is in [`evals/REPORT.md`](evals/REPORT.md). `tests/test_evals.py` fails the build if the offline engine ever fabricates a quote.
@@ -71,7 +90,7 @@ cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/
 ## Layout
 
 ```
-services/api/   FastAPI + SQLAlchemy (SQLite by default; set DATABASE_URL for Postgres)
+services/api/   FastAPI + SQLAlchemy (SQLite by default; Postgres via DATABASE_URL, tested in CI)
   app/engine/   Argumentative Intelligence engine: local.py (offline), anthropic_provider.py, router.py
   app/protocol.py  Chamber state machine, engine runs, scoped memory retrieval
 apps/web/       Next.js 16 + React 19 + Tailwind 4
@@ -81,7 +100,7 @@ docs/           Product ideation package (vision, PRD, architecture, safety, roa
 ```
 
 ### Deliberate simplifications vs `docs/SYSTEM_ARCHITECTURE.md`
-SQLite instead of Postgres/pgvector, in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub, in-memory rate limits instead of Redis, and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
+SQLite by default (Postgres supported and tested; pgvector not used yet), in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub, in-memory rate limits instead of Redis, and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
 
 ## Product docs
 

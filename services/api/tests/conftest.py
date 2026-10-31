@@ -2,7 +2,8 @@ import os
 import tempfile
 
 _tmp = tempfile.mkdtemp()
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+# Set TEST_DATABASE_URL (e.g. postgresql+psycopg://argumente@localhost:5433/argumente_test) to run on Postgres.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["ENGINE_SYNC"] = "1"
 os.environ["ENGINE_PROVIDER"] = "local"
 
@@ -10,6 +11,13 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+
+if os.environ.get("TEST_DATABASE_URL"):
+    # Start each run from an empty schema on a shared server.
+    from app.db import Base, engine, ensure_schema  # noqa: E402
+
+    Base.metadata.drop_all(engine)
+    ensure_schema()
 
 API = "/api/v1"
 

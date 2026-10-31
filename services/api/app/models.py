@@ -45,6 +45,8 @@ class Delegate(Base):
     methodology: Mapped[str] = mapped_column(String, default="pragmatist")
     autonomy: Mapped[str] = mapped_column(String, default="L1")  # L0 silent | L1 draft-and-approve
     status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE | PAUSED
+    # Owner opt-in: others may rehearse a conversation against this Delegate (PUBLIC positions only).
+    allow_rehearsal: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     owner: Mapped[User] = relationship(back_populates="delegate")
 
@@ -237,8 +239,9 @@ class SparSession(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("spr"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     claim: Mapped[str] = mapped_column(Text)
-    mode: Mapped[str] = mapped_column(String)  # devils_advocate | steelman
+    mode: Mapped[str] = mapped_column(String)  # devils_advocate | steelman | rehearsal
     methodology: Mapped[str] = mapped_column(String)
+    target_delegate_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # rehearsal only
     turns: Mapped[list] = mapped_column(JSON, default=list)
     report: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE | FINISHED
@@ -284,3 +287,32 @@ class PreRoundTurn(Base):
     authored_by: Mapped[str] = mapped_column(String, default="delegate")  # delegate | human
     unknowns: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class OptionRanking(Base):
+    """A participant's private ranking of the Mediator's options (Resolution Architect).
+    Individual rankings are never shown to others; only the aggregate, once everyone has ranked."""
+
+    __tablename__ = "option_rankings"
+    __table_args__ = (UniqueConstraint("chamber_id", "user_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    order: Mapped[list] = mapped_column(JSON)  # option indices, most preferred first
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Prediction(Base):
+    """Decision Replay: a sealed prediction made when a Chamber closes, revealed when it's revisited."""
+
+    __tablename__ = "predictions"
+    __table_args__ = (UniqueConstraint("chamber_id", "user_id"),)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("prd"))
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[int] = mapped_column(Integer)  # 0-100
+    verdict: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # right | partly | wrong
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

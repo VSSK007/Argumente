@@ -23,7 +23,9 @@ from ..models import (
     Intake,
     Membership,
     Node,
+    OptionRanking,
     Position,
+    Prediction,
     PreRoundTurn,
     Publication,
     PublicationConsent,
@@ -122,6 +124,8 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
     return {
         "preround": preround_view(db, ch, me, mems),
         "lineage": lineage_view(db, ch, me),
+        "ranking": ranking_view(db, ch, me, mems),
+        "predictions": prediction_view(db, ch, me),
         "retention": {
             "retain_until": retention._aware(ch.retain_until).isoformat() if ch.retain_until else None,
             "purged": ch.purged_at is not None,
@@ -217,6 +221,65 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
     }
 
 
+def _has_revisit(db: Session, ch: Chamber) -> bool:
+    return db.scalar(select(Chamber.id).where(Chamber.parent_id == ch.id)) is not None
+
+
+def prediction_view(db: Session, ch: Chamber, me: User) -> dict:
+    """Predictions are sealed until the Chamber is revisited; then everyone's are shown side by side."""
+    names = {m.user_id: m.user.name for m in protocol.members(db, ch)}
+    rows = list(db.scalars(select(Prediction).where(Prediction.chamber_id == ch.id).order_by(Prediction.created_at)))
+    unsealed = _has_revisit(db, ch)
+    mine = next((p for p in rows if p.user_id == me.id), None)
+
+    def out(p: Prediction) -> dict:
+        return {
+            "id": p.id,
+            "name": names.get(p.user_id, "Former member"),
+            "is_mine": p.user_id == me.id,
+            "text": p.text,
+            "confidence": p.confidence,
+            "verdict": p.verdict,
+            "review_note": p.review_note,
+        }
+
+    return {
+        "sealed": not unsealed,
+        "count": len(rows),
+        "mine": out(mine) if mine else None,
+        "all": [out(p) for p in rows] if unsealed else None,
+    }
+
+
+def ranking_view(db: Session, ch: Chamber, me: User, mems: list[Membership]) -> dict:
+    rows = {r.user_id: r for r in db.scalars(select(OptionRanking).where(OptionRanking.chamber_id == ch.id))}
+    n_opts = len(ch.options or [])
+    complete = bool(n_opts) and all(m.user_id in rows for m in mems)
+    results = None
+    if complete:
+        # Borda count: top choice earns n-1 points, last earns 0. Individual rankings stay private.
+        results = []
+        for i, opt in enumerate(ch.options):
+            positions = [r.order.index(i) for r in rows.values()]
+            results.append(
+                {
+                    "index": i,
+                    "title": opt["title"],
+                    "points": sum(n_opts - 1 - p for p in positions),
+                    "max_points": (n_opts - 1) * len(rows),
+                    "first_choices": sum(p == 0 for p in positions),
+                    "last_choices": sum(p == n_opts - 1 for p in positions) if n_opts > 1 else 0,
+                }
+            )
+        results.sort(key=lambda r: (-r["points"], r["last_choices"]))
+    return {
+        "ranked_user_ids": list(rows.keys()),
+        "mine": rows[me.id].order if me.id in rows else None,
+        "complete": complete,
+        "results": results,
+    }
+
+
 def lineage_view(db: Session, ch: Chamber, me: User) -> dict:
     """Earlier and later Chambers on the same question. Only people who were in the earlier
     Chamber see what it concluded."""
@@ -231,7 +294,14 @@ def lineage_view(db: Session, ch: Chamber, me: User) -> dict:
                 n = len(protocol.members(db, p))
                 if len(ds) == n and all(d == "approve" for d in ds):
                     approved.append({"text": it.text, "kind": it.kind or "agreement"})
-            parent = {"id": p.id, "title": p.title, "closed_state": p.closed_state, "closed_at": p.closed_at.isoformat() if p.closed_at else None, "approved": approved}
+            parent = {
+                "id": p.id,
+                "title": p.title,
+                "closed_state": p.closed_state,
+                "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+                "approved": approved,
+                "predictions": prediction_view(db, p, me),
+            }
     revisits = [{"id": c.id, "title": c.title, "state": c.state} for c in db.scalars(select(Chamber).where(Chamber.parent_id == ch.id))]
     return {"parent": parent, "revisits": revisits}
 
@@ -349,6 +419,18 @@ def list_chambers(user: User = Depends(current_user), db: Session = Depends(get_
 def get_chamber(cid: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     ch, _ = _chamber_for_member(cid, user, db)
     return chamber_view(ch, user, db)
+
+
+@router.get("/chambers/{cid}/events")
+def chamber_events(cid: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Full event record (oldest first) for the timeline. Payloads carry no private content."""
+    ch, _ = _chamber_for_member(cid, user, db)
+    names = {m.user_id: m.user.name for m in protocol.members(db, ch)}
+    rows = db.scalars(select(ChamberEvent).where(ChamberEvent.chamber_id == cid).order_by(ChamberEvent.id).limit(1000))
+    return [
+        {"id": e.id, "type": e.type, "actor_type": e.actor_type, "actor_name": names.get(e.actor_id), "payload": e.payload, "at": e.created_at.isoformat()}
+        for e in rows
+    ]
 
 
 @router.post("/chambers/{cid}/stream-ticket")
@@ -670,6 +752,48 @@ def _close(db: Session, ch: Chamber, closed_state: str, user: User | None):
         protocol.start_run(db, ch, "learn")
 
 
+class PredictionIn(BaseModel):
+    text: str = Field(min_length=5, max_length=600)
+    confidence: int = Field(ge=0, le=100)
+
+
+@router.post("/chambers/{cid}/prediction")
+def record_prediction(cid: str, body: PredictionIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    """Decision Replay: seal what you expect to happen. Editable until the Chamber is revisited."""
+    ch, _ = _chamber_for_member(cid, user, db)
+    if ch.state != "CLOSED" or ch.closed_state == "ABANDONED" or ch.purged_at:
+        err(409, "WRONG_STATE", "Predictions are made when a Chamber closes.")
+    if _has_revisit(db, ch):
+        err(409, "UNSEALED", "This Chamber has been revisited; predictions are now open for review.")
+    p = db.scalar(select(Prediction).where(Prediction.chamber_id == ch.id, Prediction.user_id == user.id))
+    if p:
+        p.text, p.confidence = body.text.strip(), body.confidence
+    else:
+        db.add(Prediction(chamber_id=ch.id, user_id=user.id, text=body.text.strip(), confidence=body.confidence))
+    protocol.emit(db, ch.id, "prediction.recorded", "human", user.id)
+    db.commit()
+    return chamber_view(ch, user, db)
+
+
+class ReviewIn(BaseModel):
+    verdict: str = Field(pattern="^(right|partly|wrong)$")
+    note: str | None = Field(default=None, max_length=600)
+
+
+@router.post("/chambers/{cid}/prediction/review")
+def review_prediction(cid: str, body: ReviewIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    ch, _ = _chamber_for_member(cid, user, db)
+    if not _has_revisit(db, ch):
+        err(409, "SEALED", "Predictions are reviewed when the Chamber is revisited.")
+    p = db.scalar(select(Prediction).where(Prediction.chamber_id == ch.id, Prediction.user_id == user.id))
+    if not p:
+        err(404, "NOT_FOUND", "You didn't record a prediction for this Chamber.")
+    p.verdict, p.review_note, p.reviewed_at = body.verdict, (body.note or "").strip() or None, now()
+    protocol.emit(db, ch.id, "prediction.reviewed", "human", user.id)
+    db.commit()
+    return chamber_view(ch, user, db)
+
+
 @router.post("/chambers/{cid}/revisit")
 def revisit(cid: str, user: User = Depends(human_user), db: Session = Depends(get_db)):
     """Reopen a closed Chamber as a new one with the same people, linked to the old outcome."""
@@ -833,6 +957,35 @@ def confirm_crux(xid: str, body: CruxIn, user: User = Depends(human_user), db: S
 
 
 # ----------------------------------------------------------------------------- agreements
+class RankingIn(BaseModel):
+    order: list[int]
+
+
+@router.post("/chambers/{cid}/ranking")
+def submit_ranking(cid: str, body: RankingIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
+    """Rank the Mediator's options privately. Locked once everyone has ranked (no strategic re-ranking)."""
+    ch, _ = _chamber_for_member(cid, user, db)
+    _require_active(ch)
+    if ch.state != "RESOLUTION" or not ch.options:
+        err(409, "WRONG_STATE", "There are no options to rank yet.")
+    if sorted(body.order) != list(range(len(ch.options))):
+        err(400, "BAD_RANKING", "Rank every option exactly once.")
+    mems = protocol.members(db, ch)
+    if ranking_view(db, ch, user, mems)["complete"]:
+        err(409, "RANKING_CLOSED", "Everyone has ranked; the results are in.")
+    r = db.scalar(select(OptionRanking).where(OptionRanking.chamber_id == ch.id, OptionRanking.user_id == user.id))
+    if r:
+        r.order = body.order
+    else:
+        db.add(OptionRanking(chamber_id=ch.id, user_id=user.id, order=body.order))
+    protocol.emit(db, ch.id, "ranking.submitted", "human", user.id)
+    db.commit()
+    if ranking_view(db, ch, user, mems)["complete"]:
+        protocol.emit(db, ch.id, "ranking.revealed", "system")
+        db.commit()
+    return chamber_view(ch, user, db)
+
+
 class ItemIn(BaseModel):
     text: str = Field(min_length=3, max_length=1000)
     from_option: bool = False
@@ -855,6 +1008,8 @@ def _require_open_for(ch: Chamber, kind: str):
 def add_item(cid: str, body: ItemIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
     ch, _ = _chamber_for_member(cid, user, db)
     _require_open_for(ch, body.kind)
+    if body.from_option and not ranking_view(db, ch, user, protocol.members(db, ch))["complete"]:
+        err(409, "RANK_FIRST", "Everyone ranks the options privately before one is proposed.")
     # Adopting a Mediator option is still labelled as engine-proposed.
     item = AgreementItem(
         chamber_id=ch.id,

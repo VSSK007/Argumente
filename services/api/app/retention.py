@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal, now
-from .models import Chamber, Crux, Intake, Node, Position, PreRoundTurn, Restatement, UnderstandingMap
+from .models import Chamber, Crux, Intake, Node, Position, Prediction, PreRoundTurn, Restatement, UnderstandingMap
 
 log = logging.getLogger("argumente.retention")
 
@@ -38,7 +38,7 @@ def _aware(dt: datetime | None) -> datetime | None:
 def purge_chamber(db: Session, ch: Chamber):
     from .protocol import emit
 
-    for model in (Intake, Node, Restatement, Crux, UnderstandingMap, PreRoundTurn):
+    for model in (Intake, Node, Restatement, Crux, UnderstandingMap, PreRoundTurn, Prediction):
         for row in db.scalars(select(model).where(model.chamber_id == ch.id)):
             db.delete(row)
     # Chamber-scoped Delegate memory and suggestions nobody acted on
