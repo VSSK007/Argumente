@@ -36,7 +36,7 @@ docker compose up --build        # http://localhost:3000 · API on :8000 · Post
 Put `ANTHROPIC_API_KEY=...` in a `.env` file next to `docker-compose.yml` to use Claude. Behind a TLS-inspecting corporate proxy, build with your CA: `docker compose build --secret id=ca,src=/path/to/ca.crt` (or `docker build --secret …` per image). The web image downloads its fonts at build time, so the build needs to reach Google Fonts. Users' browsers never do.
 
 ### Trying a multi-person Chamber on one machine
-Sign in is local-dev only (name + email, no password). Open a second browser profile or a private window to be a second person. The login page lists existing local accounts for quick switching. With `--seed`, you get `priya@demo.local`, `sam@demo.local` and `dev@demo.local`, a Chamber already at its Understanding Map, and a published Map in the Commons.
+Sign in is local-dev only (name + email, no password). Open a second browser profile or a private window to be a second person. The login page lists existing local accounts for quick switching. With `--seed`, you get `priya@demo.local`, `sam@demo.local` and `dev@demo.local`, a Chamber already at its Understanding Map, a published Map in the Commons, and a public topic with nine demo voters so the opinion landscape shows.
 
 ## What works
 
@@ -62,6 +62,7 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | Crux what-if | On the Map, toggle a confirmed crux ("suppose it's not true…") to see whose position would move, by their own admission. |
 | Evidence board | For factual and predictive differences and cruxes, people add sources side by side (supports / challenges / context). |
 | **Position Record** | Note when a conversation changed your mind. Private by default; opt in to show public entries, steelmen accepted and prediction calibration on your Delegate's profile (never which Chamber). |
+| **Public topics** | Polis-style: anyone signed in starts a question, adds short statements and votes agree / disagree / pass. An opinion landscape (PCA + k-means, pure Python) shows opinion groups, what makes each distinct, common ground across all groups and what divides them. Votes and authors are anonymous; groups appear only when every group has 3+ people. Only people vote, never Delegates. Any divisive statement can be taken into a private Chamber. Safety screening, reporting, creator moderation, rate limits. |
 | Delegate Mandate | `GET /api/v1/delegates/{handle}/mandate`: an Ed25519-signed statement of what a Delegate may assert and commit to (never commitments, third person only), verifiable with `/.well-known/argumente-keys.json`. Spec: [docs/DELEGATE_MANDATE.md](docs/DELEGATE_MANDATE.md). |
 | Design gallery | `/design` shows every component with fixed sample data. It's also the reference page for screenshot comparisons. |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
@@ -77,7 +78,7 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 31 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 35 API tests incl. the safety invariants and the eval gate
 TEST_DATABASE_URL=postgresql+psycopg://user@host/db uv run pytest   # same suite on Postgres
 cd e2e && npm install && npx playwright install chromium   # once
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
@@ -85,6 +86,7 @@ node e2e/preround.cjs                      # browser E2E: Delegate pre-round
 node e2e/lineage.cjs                       # browser E2E: agree-to-disagree record + revisit, live updates
 node e2e/features.cjs                      # browser E2E: tabs, private ranking, Decision Replay, Rehearsal Room
 node e2e/understanding.cjs                 # browser E2E: landing demo, Steelman Exchange, what-if, evidence, Position Record
+node e2e/topics.cjs                        # browser E2E: public topic, voting, opinion groups, divisive statement → Chamber
 node e2e/quality.cjs                       # accessibility (axe, WCAG 2.2 AA) on every page + /design screenshot comparison
 PERF_BUDGET=1 node e2e/quality.cjs         # …plus a 350 KB JavaScript budget (run against a production build)
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md

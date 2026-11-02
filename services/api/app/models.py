@@ -396,3 +396,37 @@ class ServerKey(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)  # key id
     private_pem: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Topic(Base):
+    """Public topic (Polis-style): people add short statements and vote; the app maps opinion groups."""
+
+    __tablename__ = "topics"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("tpc"))
+    slug: Mapped[str] = mapped_column(String, unique=True, index=True)
+    question: Mapped[str] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    creator_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String, default="OPEN")  # OPEN | CLOSED
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TopicStatement(Base):
+    __tablename__ = "topic_statements"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("tst"))
+    topic_id: Mapped[str] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))  # never shown publicly
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE | HIDDEN
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TopicVote(Base):
+    __tablename__ = "topic_votes"
+    __table_args__ = (UniqueConstraint("statement_id", "user_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    topic_id: Mapped[str] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), index=True)
+    statement_id: Mapped[str] = mapped_column(ForeignKey("topic_statements.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    vote: Mapped[int] = mapped_column(Integer)  # 1 agree, -1 disagree, 0 pass
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

@@ -65,6 +65,27 @@ def main():
     ch2 = c.post(f"{API}/chambers", headers=sam, json={"template": "household", "title": "Flat chores", "question": "How should we split the chores in the flat?"}).json()
     c.post(f"{API}/invites/{ch2['invite_token']}/accept", headers=dev)
     c.post(f"{API}/chambers/{ch2['id']}/intake", headers=dev, json={"endorse": True, "text": "Chores should be split by time, because cleaning the bathroom takes far longer than taking out the bins. I work late on weekdays so I'd rather do a big clean on Sunday."})
+    # A public topic with enough anonymous demo voters for the opinion landscape to appear
+    if not c.get(f"{API}/topics").json():
+        slug = c.post(f"{API}/topics", headers=dev, json={
+            "question": "How should flatmates split rent?",
+            "description": "A demo topic. Vote, add statements, and watch opinion groups form.",
+            "seed_statements": [
+                "Rent should be split by room size",
+                "Shared rooms are most of what rent pays for",
+                "Whoever has the biggest room should pay more",
+                "Flatmates should agree a rule before anyone moves in",
+                "Income should affect how much each person pays",
+                "Simple and equal beats perfectly fair",
+            ],
+        }).json()["slug"]
+        sts = c.get(f"{API}/topics/{slug}").json()["statements"]
+        camps = [[1, -1, 1, 1, 0, -1], [-1, 1, -1, 1, -1, 1], [1, 1, 0, 1, 1, -1]]
+        for i in range(9):
+            h, _ = login(f"voter{i}@demo.local", f"Voter {i}")
+            for st, v in zip(sts, camps[i % 3]):
+                c.post(f"{API}/topic-statements/{st['id']}/vote", headers=h, json={"vote": v})
+
     print("Seeded. Sign in as priya@demo.local, sam@demo.local or dev@demo.local (any of them from the login page).")
 
 

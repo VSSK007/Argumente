@@ -9,6 +9,13 @@ export default function Commons() {
     <div className="mx-auto max-w-[720px]">
       <div className="label-mono text-ink-2">Commons</div>
       <h1 className="font-display text-4xl">Understanding Maps, published with everyone’s consent.</h1>
+      <p className="mt-3 text-sm text-ink-2">
+        Looking for open questions to weigh in on? See{" "}
+        <Link href="/topics" className="underline">
+          public topics
+        </Link>
+        .
+      </p>
       <ul className="mt-8 divide-y hairline border-y hairline">
         {(data ?? []).map((m) => (
           <li key={m.slug}>

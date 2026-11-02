@@ -278,6 +278,7 @@ export function EngineBanner() {
 
 const NAV = [
   { href: "/", label: "Today" },
+  { href: "/topics", label: "Topics" },
   { href: "/spar", label: "Spar" },
   { href: "/commons", label: "Commons" },
   { href: "/me", label: "Me" },
@@ -287,7 +288,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { me } = useMe();
-  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design");
+  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design") || (path.startsWith("/topics") && path !== "/topics/new");
 
   useEffect(() => {
     if (me === null && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);
@@ -340,7 +341,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
       {me ? (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t hairline bg-paper md:hidden print:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t hairline bg-paper md:hidden print:hidden">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className={`py-3 text-center text-xs ${path === n.href ? "font-semibold text-ink" : "text-ink-2"}`}>
               {n.label}

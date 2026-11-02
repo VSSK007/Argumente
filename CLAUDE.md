@@ -16,3 +16,4 @@
 10. Never put session tokens in URLs. Streams use short-lived scoped tickets (`auth.make_ticket`). New endpoints that call the Mediator must call `ratelimit.check(user.id, "engine")`.
 11. Individual option rankings, sealed predictions, individual Understanding Scores and unaccepted steelmen (and all steelman feedback) are never shown to other people (only aggregates / after a revisit / once accepted). Public Position Records never reveal Chamber titles. Colours must pass WCAG AA; the quality gate enforces it.
 12. Delegate Mandates always say `may_commit: false` and `speaks_as: third_person`; changing that needs a product decision.
+13. Public topics: votes and statement authors are never exposed; opinion groups are shown only when every group has at least `topics.MIN_GROUP` (3) people; only human sessions vote (Delegates never vote).

@@ -103,11 +103,18 @@ async function visual(page, name) {
     ["login", "/login", "Continue"],
     ["public map", `/m/${slug}`, "Where each person stands"],
     ["commons", "/commons", "Commons"],
+    ["topics", "/topics", "Where does everyone actually stand?"],
     ["design", "/design", "Argumenté components"],
   ]) {
     await anon.goto(BASE + url);
     await anon.getByText(wait).first().waitFor();
     failures.push(...(await axeAudit(anon, label)));
+  }
+  const topics = await call("/topics");
+  if (topics.length) {
+    await anon.goto(`${BASE}/topics/${topics[0].slug}`);
+    await anon.getByText("How people group").waitFor();
+    failures.push(...(await axeAudit(anon, "topic")));
   }
   const page = await ctx(a.token);
   for (const [label, url, wait] of [

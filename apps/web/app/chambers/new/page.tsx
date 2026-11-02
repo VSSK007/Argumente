@@ -13,10 +13,11 @@ const EXAMPLES: Record<string, { title: string; question: string }> = {
 
 function NewChamberInner() {
   const router = useRouter();
-  const [template, setTemplate] = useState(useSearchParams().get("template") || "decision");
+  const params = useSearchParams();
+  const [template, setTemplate] = useState(params.get("template") || "decision");
   const [templates, setTemplates] = useState<Record<string, { label: string; description: string }>>({});
-  const [title, setTitle] = useState("");
-  const [question, setQuestion] = useState("");
+  const [title, setTitle] = useState(params.get("title") || "");
+  const [question, setQuestion] = useState(params.get("question") || "");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

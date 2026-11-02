@@ -42,7 +42,7 @@ def get_map(slug: str, db: Session = Depends(get_db)):
 
 
 class ReportIn(BaseModel):
-    target_type: str = Field(pattern="^(map|chamber|delegate|spar)$")
+    target_type: str = Field(pattern="^(map|chamber|delegate|spar|topic|statement)$")
     target_id: str
     reason: str = Field(min_length=3, max_length=1000)
 

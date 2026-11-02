@@ -27,6 +27,7 @@
 | D21 | Chamber retention: 90 days after close, owner-extendable | **Accepted** | Data minimization | Yes |
 | D22 | Groups of >2: each party's view is restated to the group once (not per pair) | **Accepted** | Avoids quadratic restatement load | Yes |
 | D23 | Delegate pre-round (C1) only if the core loop is solid by H48 | **Accepted** | Protects the critical path | Yes |
+| D25 | Public topics (Polis-style) built at the founder's request, ahead of the 'learn from 20 Chambers first' sequence in D18. Anonymous votes, groups shown only at 3+ people, humans-only voting, safety screen + reporting + creator moderation. | **Accepted** | Founder's call; makes the public layer demonstrable. Open: moderation at scale, sybil resistance (dev login allows unlimited accounts), whether topics should require verified accounts before launch. | Yes |
 | D24 | Expenses deferred to v1. MVP Agreements are text items with per-person approval. | **Accepted** | Focus | Yes |
 
 ## 2. Critical product decisions needing the founder

@@ -3,7 +3,7 @@
   "private": true,
   "description": "Browser tests. Install: npm install && npx playwright install chromium",
   "scripts": {
-    "all": "node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node understanding.cjs && node quality.cjs"
+    "all": "node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node understanding.cjs && node topics.cjs && node quality.cjs"
   },
   "devDependencies": {
     "axe-core": "^4.14.0",
