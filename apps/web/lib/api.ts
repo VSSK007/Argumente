@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type User = { id: string; email: string; name: string; has_delegate: boolean; delegate_handle: string | null };
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  has_delegate: boolean;
+  delegate_handle: string | null;
+  email_verified?: boolean;
+  is_admin?: boolean;
+};
 
 const TOKEN_KEY = "argumente.token";
 

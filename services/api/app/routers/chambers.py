@@ -602,7 +602,7 @@ def delegate_draft(cid: str, user: User = Depends(human_user), db: Session = Dep
     if not d:
         err(400, "NO_DELEGATE", "Create a Delegate first, or write your position yourself.")
     ratelimit.check(user.id, "engine")
-    if d.autonomy == "L0" or d.status == "PAUSED":
+    if d.autonomy == "L0" or d.status != "ACTIVE":
         err(400, "DELEGATE_SILENT", "Your Delegate is paused or set to silent.")
     positions = [
         {"id": p.id, "statement": p.statement, "stance": p.stance}
@@ -1081,9 +1081,12 @@ def publish_consent(cid: str, body: ConsentIn, user: User = Depends(human_user),
     mems = protocol.members(db, ch)
     consents = {x.user_id: x for x in db.scalars(select(PublicationConsent).where(PublicationConsent.publication_id == pub.id))}
     if not body.consent:
-        pub.status = "REVOKED" if pub.status == "PUBLISHED" else "PENDING"
+        if pub.status != "REMOVED":  # a moderator removal can't be undone by re-consenting
+            pub.status = "REVOKED" if pub.status == "PUBLISHED" else "PENDING"
         pub.snapshot = None
         protocol.emit(db, ch.id, "publication.consent.revoked", "human", user.id)
+    elif pub.status == "REMOVED":
+        protocol.emit(db, ch.id, "publication.consent.granted", "human", user.id)  # stays removed by moderators
     elif all(m.user_id in consents and consents[m.user_id].consent for m in mems):
         show_names = all(consents[m.user_id].show_name for m in mems)
         label = {m.user_id: (m.user.name if show_names else m.alias) for m in mems}

@@ -1,6 +1,6 @@
 # Argumenté: notes for Claude Code sessions
 
-- Run: `./scripts/dev.sh` (API :8000, web :3000) or `docker compose up --build`. Tests: `cd services/api && uv run pytest`; E2E: `node e2e/*.cjs` with servers up; `node e2e/quality.cjs` must stay green (axe WCAG 2.2 AA, /design screenshots).
+- Run: `./scripts/dev.sh` (API :8000, web :3000; sets ARGUMENTE_DEV=1 and ADMIN_EMAILS=dev@demo.local) or `docker compose up --build`. Tests: `cd services/api && uv run pytest`; E2E: `node e2e/*.cjs` with servers up; `node e2e/quality.cjs` must stay green (axe WCAG 2.2 AA, /design screenshots).
 - Product decisions: `docs/OPEN_QUESTIONS.md` §1 (D1–D24). Specs live in `docs/`.
 
 ## Invariants (check on every change)
@@ -17,3 +17,4 @@
 11. Individual option rankings, sealed predictions, individual Understanding Scores and unaccepted steelmen (and all steelman feedback) are never shown to other people (only aggregates / after a revisit / once accepted). Public Position Records never reveal Chamber titles. Colours must pass WCAG AA; the quality gate enforces it.
 12. Delegate Mandates always say `may_commit: false` and `speaks_as: third_person`; changing that needs a product decision.
 13. Public topics: votes and statement authors are never exposed; opinion groups are shown only when every group has at least `topics.MIN_GROUP` (3) people; only human sessions vote (Delegates never vote).
+14. Dev sign-in (`/auth/login`) exists only when `ARGUMENTE_DEV=1`; never default it on. Magic-link tokens are stored hashed, single-use, 15 minutes, and travel only in the URL fragment. Moderators act only on public content; never expose private Chamber or Spar content in `/admin`. Every moderation action writes an `AuditLog` row.

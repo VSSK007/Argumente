@@ -5,6 +5,7 @@ _tmp = tempfile.mkdtemp()
 # Set TEST_DATABASE_URL (e.g. postgresql+psycopg://argumente@localhost:5433/argumente_test) to run on Postgres.
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["ENGINE_SYNC"] = "1"
+os.environ["ARGUMENTE_DEV"] = "1"  # tests use the dev login helper; production default is off
 os.environ["ENGINE_PROVIDER"] = "local"
 
 import pytest  # noqa: E402

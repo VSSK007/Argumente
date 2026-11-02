@@ -288,7 +288,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { me } = useMe();
-  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design") || (path.startsWith("/topics") && path !== "/topics/new");
+  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/auth/") || path.startsWith("/commons") || path.startsWith("/design") || (path.startsWith("/topics") && path !== "/topics/new");
 
   useEffect(() => {
     if (me === null && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);
@@ -316,6 +316,11 @@ export function Shell({ children }: { children: ReactNode }) {
                   </Link>
                 ))
               : null}
+            {me?.is_admin ? (
+              <Link href="/admin" className={`rounded-md px-3 py-1.5 text-sm ${path === "/admin" ? "bg-paper-2 text-ink" : "text-ink-2 hover:text-ink"}`}>
+                Moderation
+              </Link>
+            ) : null}
           </nav>
           <div className="flex items-center gap-2 text-sm">
             {me ? (
@@ -323,7 +328,8 @@ export function Shell({ children }: { children: ReactNode }) {
                 <span className="hidden text-ink-2 sm:inline">{me.name}</span>
                 <button
                   className="rounded-md px-2 py-1 text-ink-2 hover:bg-paper-2 hover:text-ink"
-                  onClick={() => {
+                  onClick={async () => {
+                    await api("/auth/logout", { body: {} }).catch(() => null);
                     setToken(null);
                     router.push("/login");
                   }}

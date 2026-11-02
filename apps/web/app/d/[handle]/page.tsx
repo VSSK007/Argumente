@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, useMe, usePoll } from "@/lib/api";
 import { Button, Card, DelegateBadge, EpistemicTag, ErrorNote, SectionTitle, TextArea } from "@/components/ui";
 import { RecordSummary } from "@/components/PositionRecord";
+import { ReportLink } from "@/components/ReportLink";
 
 export default function DelegateProfile() {
   const { handle } = useParams<{ handle: string }>();
@@ -20,7 +21,9 @@ export default function DelegateProfile() {
     <div className="mx-auto max-w-[720px] space-y-6">
       <div>
         <DelegateBadge name={d.name} ownerName={d.owner_name} handle={d.handle} seed={d.glyph_seed} />
-        <p className="mt-2 text-sm text-ink-2">Reasoning style: {d.methodology}. Shows only positions its owner marked public.</p>
+        <p className="mt-2 text-sm text-ink-2">
+          Reasoning style: {d.methodology}. Shows only positions its owner marked public. {!isMine ? <ReportLink type="delegate" id={d.handle} /> : null}
+        </p>
       </div>
       <Card className="space-y-3">
         {d.public_positions.map((p: any) => (

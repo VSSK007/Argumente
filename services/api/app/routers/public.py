@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from ..auth import human_user
 from ..db import get_db
 from ..engine import engine_status
-from ..models import Publication, Report, User
+from ..models import AuditLog, Publication, Report, TopicStatement, User
+
+AUTO_HIDE_REPORTS = 3
 
 router = APIRouter(tags=["public"])
 
@@ -49,6 +51,14 @@ class ReportIn(BaseModel):
 
 @router.post("/reports")
 def report(body: ReportIn, user: User = Depends(human_user), db: Session = Depends(get_db)):
-    db.add(Report(reporter_id=user.id, **body.model_dump()))
+    db.add(Report(reporter_id=user.id, status="OPEN", **body.model_dump()))
+    db.flush()
+    if body.target_type == "statement":
+        # Three different people reporting the same public statement hide it until a moderator reviews it.
+        reporters = {r.reporter_id for r in db.scalars(select(Report).where(Report.target_type == "statement", Report.target_id == body.target_id, Report.status == "OPEN"))}
+        st = db.get(TopicStatement, body.target_id)
+        if st and st.status == "ACTIVE" and len(reporters) >= AUTO_HIDE_REPORTS:
+            st.status = "HIDDEN"
+            db.add(AuditLog(actor_id="system", action="auto_hide_statement", target_type="statement", target_id=st.id, note=f"{len(reporters)} reports"))
     db.commit()
     return {"received": True}

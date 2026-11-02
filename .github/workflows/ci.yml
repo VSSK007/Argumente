@@ -72,12 +72,12 @@ jobs:
           (cd e2e && npm ci && npx playwright install --with-deps chromium)
       - name: Start API and web (production build)
         run: |
-          (cd services/api && nohup uv run uvicorn app.main:app --port 8000 > /tmp/api.log 2>&1 &)
+          (cd services/api && ARGUMENTE_DEV=1 ADMIN_EMAILS=dev@demo.local nohup uv run uvicorn app.main:app --port 8000 > /tmp/api.log 2>&1 &)
           (cd apps/web && nohup npm run start > /tmp/web.log 2>&1 &)
           for i in $(seq 1 60); do curl -fs localhost:3000/login >/dev/null && curl -fs localhost:8000/health >/dev/null && break; sleep 1; done
       - name: End-to-end flows
         working-directory: e2e
-        run: node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node understanding.cjs && node topics.cjs
+        run: node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node understanding.cjs && node topics.cjs && node auth.cjs
       - name: Accessibility, visual regression and JS budget
         working-directory: e2e
         env:

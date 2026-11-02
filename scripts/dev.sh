@@ -7,8 +7,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 command -v uv >/dev/null || { echo "Please install uv: https://docs.astral.sh/uv/ (curl -LsSf https://astral.sh/uv/install.sh | sh)"; exit 1; }
 command -v npm >/dev/null || { echo "Please install Node.js 20.9+ (https://nodejs.org)"; exit 1; }
 
-# Optional API settings (e.g. ANTHROPIC_API_KEY) from services/api/.env
+# Optional API settings (e.g. ANTHROPIC_API_KEY, SMTP_HOST) from services/api/.env
 if [ -f "$ROOT/services/api/.env" ]; then set -a; . "$ROOT/services/api/.env"; set +a; fi
+# Local development: instant dev sign-in and a demo moderator. Real deployments leave ARGUMENTE_DEV unset.
+export ARGUMENTE_DEV="${ARGUMENTE_DEV:-1}"
+export ADMIN_EMAILS="${ADMIN_EMAILS:-dev@demo.local}"
 
 echo "→ Installing API dependencies"
 (cd "$ROOT/services/api" && uv sync -q)

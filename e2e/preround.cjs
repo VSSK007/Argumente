@@ -10,10 +10,12 @@ const run = Date.now().toString(36);
 
 async function signUpWithDelegate(page, name, stances) {
   await page.goto(`${BASE}/login`);
-  await page.getByRole("textbox", { name: "Your name" }).fill(name);
+  // Real sign-in: request a magic link; in dev mode the page offers the link directly instead of emailing it
+  await page.getByRole("textbox", { name: /Your name/ }).fill(name);
   await page.getByRole("textbox", { name: "Email" }).fill(`${name.toLowerCase()}-${run}@e2e.local`);
   await page.getByLabel("I am 18 or older.").check();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await page.getByRole("link", { name: "Open sign-in link" }).click();
   await page.waitForURL(/onboarding/);
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();

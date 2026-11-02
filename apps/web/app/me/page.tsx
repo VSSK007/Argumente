@@ -7,6 +7,7 @@ import { api, setToken, usePoll, useMe } from "@/lib/api";
 import { Button, Card, DelegateBadge, EpistemicTag, ErrorNote, SectionTitle, TextArea } from "@/components/ui";
 import { LearnedReview } from "@/components/LearnedReview";
 import { MyPositionRecord } from "@/components/PositionRecord";
+import { AccountSecurity } from "@/components/AccountSecurity";
 
 export default function Me() {
   const router = useRouter();
@@ -132,6 +133,8 @@ export default function Me() {
           </Card>
         </section>
       ) : null}
+
+      <AccountSecurity me={me} />
 
       <MyPositionRecord delegate={me.has_delegate ? d : null} onDelegate={(nd) => setD({ ...d, ...nd })} />
 

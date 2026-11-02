@@ -35,8 +35,14 @@ docker compose up --build        # http://localhost:3000 · API on :8000 · Post
 
 Put `ANTHROPIC_API_KEY=...` in a `.env` file next to `docker-compose.yml` to use Claude. Behind a TLS-inspecting corporate proxy, build with your CA: `docker compose build --secret id=ca,src=/path/to/ca.crt` (or `docker build --secret …` per image). The web image downloads its fonts at build time, so the build needs to reach Google Fonts. Users' browsers never do.
 
+### Signing in
+Real sign-in: **magic links** (a single-use link, valid 15 minutes, token kept in the URL fragment so it never reaches server logs) and **passkeys** (add one from Me). Without `SMTP_HOST` set, links are printed to the API log; with `ARGUMENTE_DEV=1` (what `scripts/dev.sh` sets) the sign-in page also offers the link directly and a developer quick-switch panel. **Dev sign-in is off unless `ARGUMENTE_DEV=1`**, so deployments are secure by default. Sessions last 30 days; "Sign out on every device" is on Me. See `services/api/.env.example` for SMTP, `WEB_ORIGIN` and `WEBAUTHN_RP_ID`.
+
+### Moderation
+Moderators are the emails in `ADMIN_EMAILS` (`scripts/dev.sh` makes `dev@demo.local` one). They get a **Moderation** page: open reports on public content (topic statements, topics, published Maps, Delegate profiles) with actions (hide/restore statement, close topic, unpublish Map, suspend/restore Delegate, dismiss) and an audit log of every action. A statement reported by three different people is hidden automatically until reviewed. Private Chambers and Spar are never opened to moderators: reports about them show only the reason.
+
 ### Trying a multi-person Chamber on one machine
-Sign in is local-dev only (name + email, no password). Open a second browser profile or a private window to be a second person. The login page lists existing local accounts for quick switching. With `--seed`, you get `priya@demo.local`, `sam@demo.local` and `dev@demo.local`, a Chamber already at its Understanding Map, a published Map in the Commons, and a public topic with nine demo voters so the opinion landscape shows.
+With `scripts/dev.sh`, the developer sign-in panel switches accounts instantly. Open a second browser profile or a private window to be a second person. The login page lists existing local accounts for quick switching. With `--seed`, you get `priya@demo.local`, `sam@demo.local` and `dev@demo.local`, a Chamber already at its Understanding Map, a published Map in the Commons, and a public topic with nine demo voters so the opinion landscape shows.
 
 ## What works
 
@@ -78,7 +84,7 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 35 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 42 API tests incl. the safety invariants and the eval gate
 TEST_DATABASE_URL=postgresql+psycopg://user@host/db uv run pytest   # same suite on Postgres
 cd e2e && npm install && npx playwright install chromium   # once
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
@@ -87,6 +93,7 @@ node e2e/lineage.cjs                       # browser E2E: agree-to-disagree reco
 node e2e/features.cjs                      # browser E2E: tabs, private ranking, Decision Replay, Rehearsal Room
 node e2e/understanding.cjs                 # browser E2E: landing demo, Steelman Exchange, what-if, evidence, Position Record
 node e2e/topics.cjs                        # browser E2E: public topic, voting, opinion groups, divisive statement → Chamber
+node e2e/auth.cjs                          # browser E2E: magic link, passkey (virtual authenticator), moderation queue
 node e2e/quality.cjs                       # accessibility (axe, WCAG 2.2 AA) on every page + /design screenshot comparison
 PERF_BUDGET=1 node e2e/quality.cjs         # …plus a 350 KB JavaScript budget (run against a production build)
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
@@ -110,7 +117,7 @@ docs/           Product ideation package (vision, PRD, architecture, safety, roa
 ```
 
 ### Deliberate simplifications vs `docs/SYSTEM_ARCHITECTURE.md`
-SQLite by default (Postgres supported and tested; pgvector not used yet), in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub, in-memory rate limits instead of Redis, and dev login instead of magic links. All of these are behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `auth.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
+SQLite by default (Postgres supported and tested; pgvector not used yet), in-process background threads instead of Redis/arq, an SSE stream that polls the event table instead of Redis pub/sub, in-memory rate limits instead of Redis, all behind small seams (`DATABASE_URL`, `protocol.start_run`, `routers/chambers.py:stream`, `ratelimit.py`). New columns are added automatically to existing local databases on startup (`db.ensure_schema`).
 
 ## Product docs
 

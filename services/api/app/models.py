@@ -20,6 +20,10 @@ class User(Base):
     name: Mapped[str] = mapped_column(String)
     is_adult: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # Set when the person proves they own the email (magic link). Dev-login accounts stay unverified.
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_admin: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    webauthn_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # opaque user handle for passkeys
     delegate: Mapped[Optional["Delegate"]] = relationship(
         back_populates="owner", uselist=False, cascade="all, delete-orphan", passive_deletes=True
     )
@@ -32,6 +36,7 @@ class AuthSession(Base):
     # "human" = interactive browser session. "service" = automation (never allowed to endorse/approve/consent).
     actor_type: Mapped[str] = mapped_column(String, default="human")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Delegate(Base):
@@ -269,6 +274,10 @@ class Report(Base):
     target_id: Mapped[str] = mapped_column(String)
     reason: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    status: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="OPEN")  # OPEN | RESOLVED | DISMISSED
+    resolved_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class PreRoundTurn(Base):
@@ -429,4 +438,50 @@ class TopicVote(Base):
     statement_id: Mapped[str] = mapped_column(ForeignKey("topic_statements.id", ondelete="CASCADE"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     vote: Mapped[int] = mapped_column(Integer)  # 1 agree, -1 disagree, 0 pass
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MagicLink(Base):
+    """Single-use sign-in link. Only a hash of the token is stored; it expires after 15 minutes."""
+
+    __tablename__ = "magic_links"
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String, index=True)
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    next_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Passkey(Base):
+    __tablename__ = "passkeys"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # credential id, base64url
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    public_key: Mapped[str] = mapped_column(Text)  # base64url COSE key
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String, default="Passkey")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WebAuthnChallenge(Base):
+    __tablename__ = "webauthn_challenges"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("wch"))
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    kind: Mapped[str] = mapped_column(String)  # register | login
+    challenge: Mapped[str] = mapped_column(String)  # base64url
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AuditLog(Base):
+    """Every moderation action, by whom, on what, and why."""
+
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor_id: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String)
+    target_type: Mapped[str] = mapped_column(String)
+    target_id: Mapped[str] = mapped_column(String)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

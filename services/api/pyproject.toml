@@ -11,6 +11,7 @@ dependencies = [
   "anthropic>=0.70",
   "psycopg[binary]>=3.2",
   "cryptography>=43",
+  "webauthn>=2.5",
 ]
 
 [dependency-groups]

@@ -14,6 +14,7 @@ LIMITS = {
     # bucket: (max actions, window seconds)
     "engine": (int(os.environ.get("RATE_LIMIT_ENGINE_PER_HOUR", "120")), 3600),
     "create": (int(os.environ.get("RATE_LIMIT_CREATE_PER_HOUR", "30")), 3600),
+    "auth": (int(os.environ.get("RATE_LIMIT_AUTH_PER_HOUR", "5")), 3600),
 }
 
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)

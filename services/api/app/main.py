@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import retention
 from .db import ensure_schema
-from .routers import auth, chambers, delegates, public, spar, topics, understanding
+from .routers import admin, auth, chambers, delegates, public, spar, topics, understanding
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth.router, delegates.router, chambers.router, spar.router, public.router, understanding.router, topics.router):
+for r in (auth.router, delegates.router, chambers.router, spar.router, public.router, understanding.router, topics.router, admin.router):
     app.include_router(r, prefix="/api/v1")
 
 

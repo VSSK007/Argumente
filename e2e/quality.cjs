@@ -100,7 +100,8 @@ async function visual(page, name) {
   const anon = await ctx(null);
   for (const [label, url, wait] of [
     ["landing", "/", "Watch the 60-second demo"],
-    ["login", "/login", "Continue"],
+    ["login", "/login", "Email me a sign-in link"],
+    ["verify", "/auth/verify", "That link didn"],
     ["public map", `/m/${slug}`, "Where each person stands"],
     ["commons", "/commons", "Commons"],
     ["topics", "/topics", "Where does everyone actually stand?"],
@@ -133,6 +134,13 @@ async function visual(page, name) {
     await page.getByRole("tab", { name: tab }).click();
     await sleep(300);
     failures.push(...(await axeAudit(page, `chamber · ${tab.toLowerCase()}`)));
+  }
+  const mod = await call("/auth/login", null, { email: "dev@demo.local", name: "Dev", is_adult: true });
+  if (mod.user.is_admin) {
+    const mp = await ctx(mod.token);
+    await mp.goto(`${BASE}/admin`);
+    await mp.getByRole("heading", { name: "Audit log" }).waitFor({ timeout: 30000 });
+    failures.push(...(await axeAudit(mp, "moderation")));
   }
   const guest = await ctx(b.token);
   await guest.goto(`${BASE}/onboarding`);

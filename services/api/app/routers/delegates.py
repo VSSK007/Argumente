@@ -153,6 +153,8 @@ class DelegatePatch(BaseModel):
 @router.patch("/delegates/me")
 def patch_my_delegate(body: DelegatePatch, user: User = Depends(human_user), db: Session = Depends(get_db)):
     d = _my_delegate(user, db)
+    if d.status == "SUSPENDED" and body.status is not None:
+        raise HTTPException(403, {"code": "SUSPENDED", "message": "This Delegate was suspended by a moderator."})
     for k, v in body.model_dump(exclude_none=True).items():
         if k == "methodology" and v not in METHODOLOGIES:
             raise HTTPException(400, {"code": "BAD_METHODOLOGY", "message": "Unknown methodology."})
@@ -296,7 +298,7 @@ def delegate_mandate(handle: str, db: Session = Depends(get_db)):
 @router.get("/delegates/{handle}")
 def public_profile(handle: str, db: Session = Depends(get_db)):
     d = db.scalar(select(Delegate).where(Delegate.handle == handle))
-    if not d:
+    if not d or d.status == "SUSPENDED":
         raise HTTPException(404, {"code": "NOT_FOUND", "message": "No Delegate with that handle."})
     from ..protocol import public_positions
     from ..understanding import record_for

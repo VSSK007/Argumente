@@ -24,6 +24,16 @@ services:
       ENGINE_ANALYZE_MODEL: ${ENGINE_ANALYZE_MODEL:-claude-sonnet-5-5}
       ENGINE_FAST_MODEL: ${ENGINE_FAST_MODEL:-claude-haiku-5-5}
       ARGUMENTE_SECRET: ${ARGUMENTE_SECRET:-change-me-in-production}
+      # Sign-in: magic links are emailed via SMTP when SMTP_HOST is set, otherwise printed in this service's log.
+      ARGUMENTE_DEV: ${ARGUMENTE_DEV:-0}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Argumenté <no-reply@localhost>}
     depends_on:
       db:
         condition: service_healthy

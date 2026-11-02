@@ -8,6 +8,7 @@ Runs through the real API so every invariant applies.
 import os
 
 os.environ.setdefault("ENGINE_SYNC", "1")
+os.environ.setdefault("ARGUMENTE_DEV", "1")  # the seed signs in demo users with the dev login
 
 from fastapi.testclient import TestClient  # noqa: E402
 
