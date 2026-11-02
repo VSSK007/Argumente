@@ -239,6 +239,10 @@ def _run_decompose(db: Session, run: EngineRun, chamber: Chamber) -> str:
         )
     _check_not_paused(db, chamber.id)
     chamber = db.get(Chamber, chamber.id)
+    from .understanding import make_quiz_items
+
+    db.flush()
+    make_quiz_items(db, chamber)
     chamber.state = "RESTATEMENT"
     emit(db, chamber.id, "state.changed", "engine", state="RESTATEMENT")
     return mode

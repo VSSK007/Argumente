@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import retention
 from .db import ensure_schema
-from .routers import auth, chambers, delegates, public, spar
+from .routers import auth, chambers, delegates, public, spar, understanding
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,10 +22,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth.router, delegates.router, chambers.router, spar.router, public.router):
+for r in (auth.router, delegates.router, chambers.router, spar.router, public.router, understanding.router):
     app.include_router(r, prefix="/api/v1")
 
 
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/.well-known/argumente-keys.json")
+def well_known_keys():
+    """Public keys for verifying Delegate Mandates."""
+    from . import mandate
+    from .db import SessionLocal
+
+    with SessionLocal() as db:
+        return mandate.jwks(db)

@@ -9,6 +9,12 @@ const SHOTS = path.join(__dirname, "screenshots");
 fs.mkdirSync(SHOTS, { recursive: true });
 const run = Date.now().toString(36);
 
+async function answerQuiz(page, choice) {
+  const labels = page.locator("table label", { hasText: choice });
+  const n = await labels.count();
+  for (let k = 0; k < n; k++) await labels.nth(k).click();
+}
+
 async function shot(page, name) {
   await page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: true });
 }
@@ -68,11 +74,18 @@ async function login(page, name, next = "") {
   await alice.getByRole("button", { name: "Endorse & submit" }).click();
   await alice.getByRole("button", { name: "Ask the Mediator to read" }).click();
 
+  // --- Understanding Score, "before" half: Alice guesses, Bob skips
+  await alice.getByText("How well do you know where everyone stands?").waitFor({ timeout: 20000 });
+  await answerQuiz(alice, "Agrees");
+  await shot(alice, "04a-quiz-before");
+  await alice.getByRole("button", { name: "Lock in my guesses" }).click();
+
   // --- Restatement gate
   await alice.getByRole("heading", { name: "Is this what you mean?" }).waitFor({ timeout: 20000 });
   await alice.getByText("live", { exact: false }).first().waitFor({ timeout: 10000 });
   await shot(alice, "04-restatement-gate");
   await bob.reload();
+  await bob.getByRole("button", { name: "Skip", exact: true }).click();
   await bob.getByRole("button", { name: "Not quite" }).click();
   await bob.getByPlaceholder(/What did it get wrong/).fill("The budget is the main thing, not the novelty");
   await bob.getByRole("button", { name: "Ask the Mediator to revise" }).click();
@@ -81,8 +94,20 @@ async function login(page, name, next = "") {
   await alice.getByRole("button", { name: "Yes, that’s me" }).click();
 
   // --- Understanding Map
-  await alice.getByText("Where each person stands").waitFor({ timeout: 20000 });
+  await alice.getByText("Where each person stands").first().waitFor({ timeout: 20000 });
   await shot(alice, "05-understanding-map");
+  // "after" half of the Understanding Score
+  await alice.getByText("Now guess again").waitFor({ timeout: 10000 });
+  await answerQuiz(alice, "Agrees");
+  await alice.getByRole("button", { name: "Lock in my guesses" }).click();
+  await alice.getByText("How much better do you understand each other?").waitFor({ timeout: 10000 });
+  // Bob (who skipped the first round) answers now; Alice's score fills in live
+  await bob.getByText("Now guess again").waitFor({ timeout: 10000 });
+  await answerQuiz(bob, "Agrees");
+  await bob.getByRole("button", { name: "Lock in my guesses" }).click();
+  await alice.getByText(/after 100%/).first().waitFor({ timeout: 10000 });
+  await alice.getByText("How much better do you understand each other?").scrollIntoViewIfNeeded();
+  await shot(alice, "05a-understanding-score");
   await alice.getByRole("button", { name: "Explore options" }).click();
   await alice.getByText("What you’re agreeing to").waitFor({ timeout: 20000 });
   await alice.getByPlaceholder(/Propose an item/).fill("Porto, 4 nights, max €500 each, one slow day in the middle");

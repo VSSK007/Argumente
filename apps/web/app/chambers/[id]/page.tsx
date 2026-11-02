@@ -22,6 +22,7 @@ import {
 import { MapView, type MapData } from "@/components/MapView";
 import { ArgumentGraph } from "@/components/chamber/ArgumentGraph";
 import { Timeline } from "@/components/chamber/Timeline";
+import { CruxWhatIf, EvidenceBoard, MindChangePrompt, QuizPanel, ScoreCard, SteelmanExchange } from "@/components/chamber/Understanding";
 
 type Member = {
   user_id: string;
@@ -46,6 +47,8 @@ export default function ChamberPage() {
   reloadRef.current = reload;
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"now" | "map" | "graph" | "timeline">("now");
+  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
+  const skip = (phase: string) => setSkipped((x) => ({ ...x, [phase]: true }));
 
   async function act(path: string, body: unknown = {}) {
     setError(null);
@@ -159,12 +162,22 @@ export default function ChamberPage() {
           ) : null}
 
           {ch.state === "INTAKE" ? <Intake ch={ch} me={me} act={act} /> : null}
-          {ch.state === "RESTATEMENT" || ch.state === "MAPPING" ? <Restatements ch={ch} act={act} /> : null}
+          {ch.state === "RESTATEMENT" && ch.quiz?.status === "ready" && !ch.quiz.pre_done && !skipped.pre ? (
+            // Guess first, read second: the "before" half of the Understanding Score.
+            <QuizPanel ch={ch} act={act} phase="pre" onSkip={() => skip("pre")} />
+          ) : ch.state === "RESTATEMENT" || ch.state === "MAPPING" ? (
+            <>
+              <Restatements ch={ch} act={act} />
+              <SteelmanExchange ch={ch} act={act} />
+            </>
+          ) : null}
 
           {ch.state === "MAP" && mapData ? (
             <>
               <MapView map={mapData} />
               <InterpretationDiff ch={ch} />
+              <CruxWhatIf ch={ch} />
+              <EvidenceBoard ch={ch} act={act} refresh={reload} />
               {!ch.paused ? (
                 <Card className="mx-auto max-w-[720px]">
                   <SectionTitle kicker="What next?">You understand each other. Now what?</SectionTitle>
@@ -185,6 +198,14 @@ export default function ChamberPage() {
 
           {ch.state === "RESOLUTION" ? <Resolution ch={ch} act={act} /> : null}
 
+          {["MAP", "OPTIONS_PENDING", "RESOLUTION", "CLOSED"].includes(ch.state) && ch.quiz?.status === "ready" && !ch.retention?.purged ? (
+            <div className="mx-auto max-w-[720px] space-y-6">
+              {!ch.quiz.post_done && !skipped.post && !ch.paused ? <QuizPanel ch={ch} act={act} phase="post" onSkip={() => skip("post")} /> : null}
+              <ScoreCard ch={ch} />
+              <SteelmanExchange ch={ch} act={act} />
+            </div>
+          ) : null}
+
           {ch.state === "CLOSED" ? (
             <Card className="mx-auto max-w-[720px]">
               <div className="label-mono text-ink-2">Closed</div>
@@ -203,6 +224,7 @@ export default function ChamberPage() {
               {ch.agreement.items.some((i: any) => i.kind === "agreement") ? <AgreementList ch={ch} act={act} readOnly /> : null}
               {ch.closed_state === "UNDERSTOOD" && !ch.retention?.purged ? <UnderstandingRecord ch={ch} act={act} /> : null}
               {ch.closed_state !== "ABANDONED" ? <Prediction ch={ch} act={act} /> : null}
+              {ch.closed_state !== "ABANDONED" ? <MindChangePrompt ch={ch} /> : null}
               <Lineage ch={ch} />
               <Retention ch={ch} act={act} />
             </Card>
@@ -224,6 +246,8 @@ export default function ChamberPage() {
         <div className="space-y-8">
           <MapView map={mapData} />
           <InterpretationDiff ch={ch} />
+          <CruxWhatIf ch={ch} />
+          <EvidenceBoard ch={ch} act={act} refresh={reload} />
           {ch.state !== "CLOSED" ? <Publish ch={ch} act={act} /> : null}
           <div className="text-center">
             <button className="text-sm underline" onClick={() => window.print()}>
@@ -303,10 +327,17 @@ function NowBanner({ ch, me, running, onGo }: { ch: any; me: Member; running: bo
   } else if (ch.state === "RESTATEMENT") {
     const mineR = ch.restatements.find((r: any) => r.is_mine);
     const accepted = ch.restatements.filter((r: any) => r.status === "ACCEPTED").map((r: any) => r.of_user_id);
-    if (mineR && mineR.status === "PENDING") [title, detail, mine] = ["Your turn: is this what you mean?", "Check how the Mediator explained your view to the group.", true];
+    if (ch.quiz?.status === "ready" && !ch.quiz.pre_done) [title, detail, mine] = ["Your turn: a one-minute guess first", "Before you read how everyone’s view was explained, guess where they stand.", true];
+    else if (mineR && mineR.status === "PENDING") [title, detail, mine] = ["Your turn: is this what you mean?", "Check how the Mediator explained your view to the group.", true];
     else [title, detail] = ["Waiting at the Restatement Gate", `Still checking: ${waitingOn(accepted) || "nobody"}.`];
   } else if (ch.state === "MAP") {
-    [title, detail, mine] = ["The Understanding Map is ready", "Read it together, then decide: close as understood, or explore options.", true];
+    [title, detail, mine] = [
+      "The Understanding Map is ready",
+      ch.quiz?.status === "ready" && !ch.quiz.post_done
+        ? "Read it, then guess again to see your Understanding Score."
+        : "Read it together, then decide: close as understood, or explore options.",
+      true,
+    ];
   } else if (ch.state === "RESOLUTION") {
     const ranked = ch.ranking?.ranked_user_ids ?? [];
     if (ch.options.length && !ch.ranking?.complete && !ranked.includes(me.user_id)) [title, detail, mine] = ["Your turn: rank the options", "Privately. Only the combined result is shown.", true];

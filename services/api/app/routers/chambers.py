@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import protocol, ratelimit, retention, safety
+from .. import protocol, ratelimit, retention, safety, understanding
 from ..auth import current_user, human_user, make_ticket, read_ticket
 from ..cards import TEMPLATES
 from ..db import SessionLocal, get_db, now
@@ -126,6 +126,9 @@ def chamber_view(ch: Chamber, me: User, db: Session) -> dict:
         "lineage": lineage_view(db, ch, me),
         "ranking": ranking_view(db, ch, me, mems),
         "predictions": prediction_view(db, ch, me),
+        "steelmen": understanding.steelman_view(db, ch, me),
+        "quiz": understanding.quiz_view(db, ch, me),
+        "evidence": understanding.evidence_view(db, ch, me),
         "retention": {
             "retain_until": retention._aware(ch.retain_until).isoformat() if ch.retain_until else None,
             "purged": ch.purged_at is not None,

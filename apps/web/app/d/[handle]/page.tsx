@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, useMe, usePoll } from "@/lib/api";
 import { Button, Card, DelegateBadge, EpistemicTag, ErrorNote, SectionTitle, TextArea } from "@/components/ui";
+import { RecordSummary } from "@/components/PositionRecord";
 
 export default function DelegateProfile() {
   const { handle } = useParams<{ handle: string }>();
@@ -30,6 +31,12 @@ export default function DelegateProfile() {
         ))}
         {!d.public_positions.length ? <p className="text-sm text-ink-2">No public positions.</p> : null}
       </Card>
+      {d.record ? (
+        <Card>
+          <SectionTitle kicker="Position Record">How {d.owner_name} handles disagreement</SectionTitle>
+          <RecordSummary r={d.record} publicView />
+        </Card>
+      ) : null}
       {d.allow_rehearsal && me && !isMine ? (
         <Card>
           <SectionTitle kicker="Rehearsal Room">Practise a hard conversation with {d.owner_name}</SectionTitle>

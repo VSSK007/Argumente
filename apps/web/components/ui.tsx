@@ -287,7 +287,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { me } = useMe();
-  const isPublic = path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design");
+  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/commons") || path.startsWith("/design");
 
   useEffect(() => {
     if (me === null && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);

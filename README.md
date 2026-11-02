@@ -56,6 +56,13 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 | Decision Replay | At close, each person seals a prediction ("what will actually happen?") with a confidence. Predictions stay sealed until the Chamber is revisited, then everyone's are shown side by side and each person marks theirs right, partly right, or wrong. |
 | Rehearsal Room | Practise a hard conversation against someone's Delegate, if they've opted in. It uses only their **public** positions, speaks about them in the third person, and says plainly what it doesn't know. Owners see a rehearsal count, never the content. |
 | Chamber layout | A "Now" banner says what the Chamber needs from you. Tabs for **Now**, **Understanding Map** (printable), **Argument graph** (interactive SVG: shared ground, typed differences, each person's claims, cruxes and inferences; text version underneath) and **Timeline** (the full record grouped by stage). Live presence shows who's ready, understood or ranked. |
+| **Landing + guided demo** | Logged-out visitors see a 60-second scripted replay of a Chamber (private positions → Delegates → "is this what you mean?" → Map → steelman → Understanding Score → agreement). Works offline. |
+| **Understanding Score** | Before reading the restatements, each person says where they stand on 3–6 statements taken verbatim from what people endorsed, and guesses everyone else. After the Map they guess again. Scored against each person's own answers: "You understood Bob 40% → 90%". Your scores are private; others see the group average. |
+| **Steelman Exchange** | Write someone else's view in your own words; they rate it 1–5. Only steelmen they rate 4+ are shown to the group; feedback stays between the two of you. |
+| Crux what-if | On the Map, toggle a confirmed crux ("suppose it's not true…") to see whose position would move, by their own admission. |
+| Evidence board | For factual and predictive differences and cruxes, people add sources side by side (supports / challenges / context). |
+| **Position Record** | Note when a conversation changed your mind. Private by default; opt in to show public entries, steelmen accepted and prediction calibration on your Delegate's profile (never which Chamber). |
+| Delegate Mandate | `GET /api/v1/delegates/{handle}/mandate`: an Ed25519-signed statement of what a Delegate may assert and commit to (never commitments, third person only), verifiable with `/.well-known/argumente-keys.json`. Spec: [docs/DELEGATE_MANDATE.md](docs/DELEGATE_MANDATE.md). |
 | Design gallery | `/design` shows every component with fixed sample data. It's also the reference page for screenshot comparisons. |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
 | Safety | Abuse/coercion/self-harm screening → private resources + quiet pause |
@@ -70,13 +77,14 @@ Sign in is local-dev only (name + email, no password). Open a second browser pro
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 27 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 31 API tests incl. the safety invariants and the eval gate
 TEST_DATABASE_URL=postgresql+psycopg://user@host/db uv run pytest   # same suite on Postgres
 cd e2e && npm install && npx playwright install chromium   # once
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
 node e2e/preround.cjs                      # browser E2E: Delegate pre-round
 node e2e/lineage.cjs                       # browser E2E: agree-to-disagree record + revisit, live updates
 node e2e/features.cjs                      # browser E2E: tabs, private ranking, Decision Replay, Rehearsal Room
+node e2e/understanding.cjs                 # browser E2E: landing demo, Steelman Exchange, what-if, evidence, Position Record
 node e2e/quality.cjs                       # accessibility (axe, WCAG 2.2 AA) on every page + /design screenshot comparison
 PERF_BUDGET=1 node e2e/quality.cjs         # …plus a 350 KB JavaScript budget (run against a production build)
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md
@@ -105,5 +113,7 @@ SQLite by default (Postgres supported and tested; pgvector not used yet), in-pro
 ## Product docs
 
 [Vision](docs/VISION.md) · [PRD](docs/PRD.md) · [Market research](docs/MARKET_RESEARCH.md) · [Argumentative Intelligence](docs/ARGUMENTATIVE_INTELLIGENCE.md) · [Delegates](docs/PERSONA_ARCHITECTURE.md) · [Architecture](docs/SYSTEM_ARCHITECTURE.md) · [Trust & Safety](docs/TRUST_AND_SAFETY.md) · [UX](docs/UX_PRODUCT_SPEC.md) · [Business](docs/BUSINESS_MODEL.md) · [MVP roadmap](docs/MVP_ROADMAP.md) · [Execution plan](docs/CLAUDE_CODE_EXECUTION_PLAN.md) · [Open questions](docs/OPEN_QUESTIONS.md)
+
+![Landing](docs/screenshots/21-landing.png)
 
 ![Understanding Map](docs/screenshots/05-understanding-map.png)

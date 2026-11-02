@@ -47,6 +47,8 @@ class Delegate(Base):
     status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE | PAUSED
     # Owner opt-in: others may rehearse a conversation against this Delegate (PUBLIC positions only).
     allow_rehearsal: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    # Owner opt-in: show the Position Record (public mind changes, steelmen accepted, calibration) on the profile.
+    show_record: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     owner: Mapped[User] = relationship(back_populates="delegate")
 
@@ -316,3 +318,81 @@ class Prediction(Base):
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Steelman(Base):
+    """Steelman Exchange: one person writes another's view in their own words; that person rates it.
+    Visible only to the two of them unless the subject rates it 4 or 5 ("accepted")."""
+
+    __tablename__ = "steelmen"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("stm"))
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    subject_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5, by the subject only
+    feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    rated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class QuizItem(Base):
+    """Understanding Score item: a statement taken verbatim from someone's endorsed claims."""
+
+    __tablename__ = "quiz_items"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("qzi"))
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    node_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class QuizAnswer(Base):
+    """phase: self (your own view: the ground truth), pre (guessing others before reading the
+    restatements), post (guessing again after the Map)."""
+
+    __tablename__ = "quiz_answers"
+    __table_args__ = (UniqueConstraint("item_id", "respondent_id", "about_id", "phase"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("quiz_items.id", ondelete="CASCADE"))
+    respondent_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    about_id: Mapped[str] = mapped_column(String)
+    phase: Mapped[str] = mapped_column(String)  # self | pre | post
+    answer: Mapped[str] = mapped_column(String)  # agree | disagree | unsure
+
+
+class Evidence(Base):
+    """Evidence board: sources and notes people add side by side for a factual difference or a crux."""
+
+    __tablename__ = "evidence"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("evd"))
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    target_id: Mapped[str] = mapped_column(String)  # a DISAGREEMENT node id or a crux id
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    stance: Mapped[str] = mapped_column(String)  # supports | challenges | context
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MindChange(Base):
+    """Position Record: 'I changed my mind about…'. Private unless the owner marks it public."""
+
+    __tablename__ = "mind_changes"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("mch"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    chamber_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ServerKey(Base):
+    """Signing key for Delegate Mandates (Ed25519). Generated on first use."""
+
+    __tablename__ = "server_keys"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # key id
+    private_pem: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

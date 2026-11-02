@@ -27,7 +27,7 @@ Plus **Solo Spar**. Someone arriving alone gets value immediately, and it also d
 | Native apps, PWA push, follows, topics | ❌ Deferred | |
 
 ## Build status (local MVP, branch `feat/local-mvp`)
-Built: M1–M12, S1 (agreements), S2 (publish + public page), S3 (eval harness, `evals/`), S4 (rule-based screening), C1 (Delegate pre-round), C2 (public Delegate profile), C3 (Interpretation Diff), C4 (Commons), plus from P2: Delegate candidate-position review, SSE live updates, D21 retention, agree-to-disagree records (PRD #13), revisits (F4.4), per-user rate limits, private option ranking, Decision Replay (PRD #15), Rehearsal Room (#17), Chamber page reorganised by stage with argument graph and timeline, Postgres + Docker Compose, CI, and an accessibility/visual/JS-budget quality gate. Not built: S5 deploy (waiting on accounts and keys, D15).
+Built: M1–M12, S1 (agreements), S2 (publish + public page), S3 (eval harness, `evals/`), S4 (rule-based screening), C1 (Delegate pre-round), C2 (public Delegate profile), C3 (Interpretation Diff), C4 (Commons), plus from P2: Delegate candidate-position review, SSE live updates, D21 retention, agree-to-disagree records (PRD #13), revisits (F4.4), per-user rate limits, private option ranking, Decision Replay (PRD #15), Rehearsal Room (#17), Chamber page reorganised by stage with argument graph and timeline, Postgres + Docker Compose, CI, an accessibility/visual/JS-budget quality gate, Steelman Exchange, Understanding Score, crux what-if + evidence board, Position Record, a landing page with a guided demo, and the Delegate Mandate (draft spec). Not built: public topics (Polis-style), pending the decision to open a public layer. Not built: S5 deploy (waiting on accounts and keys, D15).
 
 ## 2. Prioritized backlog
 

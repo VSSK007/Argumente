@@ -77,7 +77,7 @@ jobs:
           for i in $(seq 1 60); do curl -fs localhost:3000/login >/dev/null && curl -fs localhost:8000/health >/dev/null && break; sleep 1; done
       - name: End-to-end flows
         working-directory: e2e
-        run: node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs
+        run: node flow.cjs && node preround.cjs && node lineage.cjs && node features.cjs && node understanding.cjs
       - name: Accessibility, visual regression and JS budget
         working-directory: e2e
         env:

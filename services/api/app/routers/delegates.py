@@ -33,6 +33,7 @@ def delegate_out(d: Delegate) -> dict:
         "autonomy": d.autonomy,
         "status": d.status,
         "allow_rehearsal": bool(d.allow_rehearsal),
+        "show_record": bool(d.show_record),
         "owner": {"id": d.owner.id, "name": d.owner.name},
     }
 
@@ -146,6 +147,7 @@ class DelegatePatch(BaseModel):
     autonomy: str | None = Field(default=None, pattern="^(L0|L1)$")  # L2/L3 deferred (D20)
     status: str | None = Field(default=None, pattern="^(ACTIVE|PAUSED)$")
     allow_rehearsal: bool | None = None
+    show_record: bool | None = None
 
 
 @router.patch("/delegates/me")
@@ -280,12 +282,24 @@ def discard_candidate(pid: str, user: User = Depends(human_user), db: Session = 
     return {"discarded": True}
 
 
+@router.get("/delegates/{handle}/mandate")
+def delegate_mandate(handle: str, db: Session = Depends(get_db)):
+    """Signed Delegate Mandate (docs/DELEGATE_MANDATE.md): what this Delegate may assert and commit to."""
+    from .. import mandate
+
+    d = db.scalar(select(Delegate).where(Delegate.handle == handle))
+    if not d:
+        raise HTTPException(404, {"code": "NOT_FOUND", "message": "No Delegate with that handle."})
+    return mandate.issue(db, d)
+
+
 @router.get("/delegates/{handle}")
 def public_profile(handle: str, db: Session = Depends(get_db)):
     d = db.scalar(select(Delegate).where(Delegate.handle == handle))
     if not d:
         raise HTTPException(404, {"code": "NOT_FOUND", "message": "No Delegate with that handle."})
     from ..protocol import public_positions
+    from ..understanding import record_for
 
     public = public_positions(db, d.id)
     return {
@@ -296,4 +310,6 @@ def public_profile(handle: str, db: Session = Depends(get_db)):
         "owner_name": d.owner.name,
         "allow_rehearsal": bool(d.allow_rehearsal),
         "public_positions": [position_out(p) for p in public],
+        # Position Record, only if the owner opted in; public entries and aggregate counts only.
+        "record": record_for(db, d.owner, public=True) if d.show_record else None,
     }

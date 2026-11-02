@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api, setToken, usePoll, useMe } from "@/lib/api";
 import { Button, Card, DelegateBadge, EpistemicTag, ErrorNote, SectionTitle, TextArea } from "@/components/ui";
 import { LearnedReview } from "@/components/LearnedReview";
+import { MyPositionRecord } from "@/components/PositionRecord";
 
 export default function Me() {
   const router = useRouter();
@@ -131,6 +132,8 @@ export default function Me() {
           </Card>
         </section>
       ) : null}
+
+      <MyPositionRecord delegate={me.has_delegate ? d : null} onDelegate={(nd) => setD({ ...d, ...nd })} />
 
       <section>
         <SectionTitle kicker="Your data">Export or delete</SectionTitle>

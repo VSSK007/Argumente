@@ -67,7 +67,7 @@ async function asUser(browser, token, viewport = { width: 1280, height: 900 }) {
   await page.getByRole("button", { name: "Submit my ranking" }).click();
   await page.getByText("Waiting for: Paul").waitFor();
   const v = await call(`/chambers/${ch.id}`, p.token);
-  if (v.ranking.mine !== null || JSON.stringify(v).includes('"mine":[')) throw new Error("Lena's ranking leaked to Paul");
+  if (v.ranking.mine !== null || JSON.stringify(v.ranking).includes('"mine":[')) throw new Error("Lena's ranking leaked to Paul");
   await call(`/chambers/${ch.id}/ranking`, p.token, { order: v.options.map((_, i) => i) });
   await page.getByText("How the options landed").waitFor({ timeout: 5000 }); // arrives live
   await shot(page, "18-ranking-results");

@@ -99,6 +99,7 @@ async function visual(page, name) {
   console.log("Accessibility (WCAG 2.2 AA, serious/critical fail):");
   const anon = await ctx(null);
   for (const [label, url, wait] of [
+    ["landing", "/", "Watch the 60-second demo"],
     ["login", "/login", "Continue"],
     ["public map", `/m/${slug}`, "Where each person stands"],
     ["commons", "/commons", "Commons"],

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePoll, useMe } from "@/lib/api";
 import { Card, SectionTitle } from "@/components/ui";
 import { LearnedReview } from "@/components/LearnedReview";
+import { Landing } from "@/components/Landing";
 
 type ChamberRow = {
   id: string;
@@ -31,6 +32,7 @@ const STATE_LABEL: Record<string, string> = {
 export default function Today() {
   const { me } = useMe();
   const { data } = usePoll<ChamberRow[]>(me ? "/chambers" : null, 4000);
+  if (me === null) return <Landing />;
   if (!me) return null;
   const needs = (data ?? []).filter((c) => c.needs_you);
   const active = (data ?? []).filter((c) => c.state !== "CLOSED");

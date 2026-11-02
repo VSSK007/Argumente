@@ -14,4 +14,5 @@
 8. Retention purges a closed Chamber's private content; never purge agreements, consented publications, or positions the owner kept.
 9. Schema changes must be additive (new tables/nullable columns) so `db.ensure_schema()` can upgrade existing local databases.
 10. Never put session tokens in URLs. Streams use short-lived scoped tickets (`auth.make_ticket`). New endpoints that call the Mediator must call `ratelimit.check(user.id, "engine")`.
-11. Individual option rankings and sealed predictions are never shown to other people (only aggregates / after a revisit). Colours must pass WCAG AA; the quality gate enforces it.
+11. Individual option rankings, sealed predictions, individual Understanding Scores and unaccepted steelmen (and all steelman feedback) are never shown to other people (only aggregates / after a revisit / once accepted). Public Position Records never reveal Chamber titles. Colours must pass WCAG AA; the quality gate enforces it.
+12. Delegate Mandates always say `may_commit: false` and `speaks_as: third_person`; changing that needs a product decision.

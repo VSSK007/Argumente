@@ -10,6 +10,7 @@ dependencies = [
   "pydantic>=2.7",
   "anthropic>=0.70",
   "psycopg[binary]>=3.2",
+  "cryptography>=43",
 ]
 
 [dependency-groups]

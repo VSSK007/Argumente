@@ -46,6 +46,13 @@ export const EVENT_LABEL: Record<string, string> = {
   "ranking.revealed": "Everyone ranked; results revealed",
   "prediction.recorded": "sealed a prediction",
   "prediction.reviewed": "looked back at their prediction",
+  "steelman.written": "wrote a steelman of someone’s view",
+  "steelman.rated": "rated a steelman of their view",
+  "steelman.accepted": "accepted a steelman of their view",
+  "quiz.pre": "made their ‘before’ guesses",
+  "quiz.post": "made their ‘after’ guesses",
+  "evidence.added": "added evidence to check",
+  "mind.changed": "noted a change of mind",
 };
 
 const STAGE_OF: Record<string, string> = {
@@ -59,7 +66,7 @@ const STAGE_OF: Record<string, string> = {
   CLOSED: "Closed",
 };
 
-const MILESTONES = new Set(["gate.passed", "map.generated", "chamber.closed", "ranking.revealed", "preround.openings.revealed", "publication.published"]);
+const MILESTONES = new Set(["steelman.accepted", "gate.passed", "map.generated", "chamber.closed", "ranking.revealed", "preround.openings.revealed", "publication.published"]);
 const QUIET = new Set(["engine.run.started", "engine.run.completed", "state.changed"]);
 
 export function Timeline({ chamberId, refreshKey }: { chamberId: string; refreshKey: number }) {
