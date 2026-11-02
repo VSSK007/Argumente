@@ -74,7 +74,11 @@ export function useMe() {
   }, []);
   useEffect(() => {
     load();
-    const h = () => load();
+    const h = () => {
+      // Signed in or out elsewhere: we no longer know who this is until /me answers.
+      setMe(getToken() ? undefined : null);
+      load();
+    };
     window.addEventListener("argumente-auth", h);
     return () => window.removeEventListener("argumente-auth", h);
   }, [load]);

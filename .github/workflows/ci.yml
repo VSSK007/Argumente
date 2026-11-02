@@ -92,4 +92,4 @@ jobs:
           path: e2e/screenshots
       - name: Server logs
         if: failure()
-        run: tail -100 /tmp/api.log /tmp/web.log
+        run: tail -n 100 /tmp/api.log /tmp/web.log

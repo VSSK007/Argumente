@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { api, setToken, useMe } from "@/lib/api";
+import { api, getToken, setToken, useMe } from "@/lib/api";
 
 /* ------------------------------------------------------------------ primitives */
 
@@ -291,7 +291,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/auth/") || path.startsWith("/commons") || path.startsWith("/design") || (path.startsWith("/topics") && path !== "/topics/new");
 
   useEffect(() => {
-    if (me === null && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);
+    // Only redirect when there is genuinely no session: a token whose /me check is still in flight is not "signed out".
+    if (me === null && !getToken() && !isPublic && !path.startsWith("/join")) router.replace(`/login?next=${encodeURIComponent(path)}`);
     if (me && !me.has_delegate && path === "/" && typeof window !== "undefined" && !sessionStorage.getItem("skip-onboarding"))
       router.replace("/onboarding");
   }, [me, path, isPublic, router]);
