@@ -80,8 +80,11 @@ async function call(p, token, body) {
   await page.screenshot({ path: path.join(SHOTS, "29-moderation.png") });
   const card = page.locator("div", { hasText: `Moderation test topic ${run}?` }).filter({ has: page.getByRole("button", { name: "Restore statement" }) }).last();
   await card.getByLabel("Note for the audit log").fill("Not spam");
-  await card.getByRole("button", { name: "Restore statement" }).click();
-  await page.getByText("Not spam").first().waitFor();
+  // Wait for the server to confirm the action (the note text is already on screen in the textarea).
+  await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/resolve") && r.request().method() === "POST" && r.ok()),
+    card.getByRole("button", { name: "Restore statement" }).click(),
+  ]);
   if (!(await call(`/topics/${slug}`)).statements.some((s) => s.id === st.id)) throw new Error("Statement not restored");
 
   console.log("Auth & moderation E2E OK");
