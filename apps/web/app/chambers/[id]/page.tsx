@@ -223,6 +223,7 @@ export default function ChamberPage() {
               ) : null}
               {ch.agreement.items.some((i: any) => i.kind === "agreement") ? <AgreementList ch={ch} act={act} readOnly /> : null}
               {ch.closed_state === "UNDERSTOOD" && !ch.retention?.purged ? <UnderstandingRecord ch={ch} act={act} /> : null}
+              {ch.closed_state !== "ABANDONED" ? <FeedbackPrompt chamberId={ch.id} /> : null}
               {ch.closed_state !== "ABANDONED" ? <Prediction ch={ch} act={act} /> : null}
               {ch.closed_state !== "ABANDONED" ? <MindChangePrompt ch={ch} /> : null}
               <Lineage ch={ch} />
@@ -1101,6 +1102,50 @@ function Lineage({ ch }: { ch: any }) {
         <span className="text-xs text-ink-2">Starts a new Chamber on the same question, linked to this outcome.</span>
       </div>
       <ErrorNote error={error} />
+    </div>
+  );
+}
+
+/** Two quick questions at close. The note is shared with the Argumenté team, and says so. */
+function FeedbackPrompt({ chamberId }: { chamberId: string }) {
+  const { data, reload } = usePoll<any>(`/chambers/${chamberId}/feedback`, 0);
+  const [useful, setUseful] = useState(0);
+  const [understood, setUnderstood] = useState<boolean | null>(null);
+  const [note, setNote] = useState("");
+  if (!data) return null;
+  if (data.given)
+    return <p className="mt-5 border-t hairline pt-4 text-sm text-agree">Thanks for the feedback. It helps us improve.</p>;
+  return (
+    <div className="mt-5 border-t hairline pt-4">
+      <div className="label-mono text-ink-2">Was this useful?</div>
+      <div className="mt-2 flex flex-wrap items-center gap-1 text-sm" role="radiogroup" aria-label="How useful was this Chamber?">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} role="radio" aria-checked={useful === n} aria-label={`${n} of 5`} onClick={() => setUseful(n)} className={`h-8 w-8 rounded-full border text-sm ${useful >= n ? "border-ink bg-ink text-paper" : "hairline bg-white"}`}>
+            {n}
+          </button>
+        ))}
+        <span className="ml-2 text-xs text-ink-2">1 = not at all, 5 = very</span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        Do you understand the others better now?
+        {[true, false].map((v) => (
+          <button key={String(v)} onClick={() => setUnderstood(v)} aria-pressed={understood === v} className={`rounded-full border px-3 py-0.5 ${understood === v ? "border-ink bg-ink text-paper" : "hairline bg-white"}`}>
+            {v ? "Yes" : "Not really"}
+          </button>
+        ))}
+      </div>
+      <TextArea rows={1} className="mt-2" aria-label="Anything else?" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything else? (shared with the Argumenté team, so please keep it free of private details)" />
+      <Button
+        className="mt-2"
+        variant="quiet"
+        disabled={!useful}
+        onClick={async () => {
+          await api(`/chambers/${chamberId}/feedback`, { body: { useful, understood, note: note || null } });
+          reload();
+        }}
+      >
+        Send feedback
+      </Button>
     </div>
   );
 }

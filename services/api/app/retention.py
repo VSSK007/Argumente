@@ -17,6 +17,7 @@ from .models import (
     Chamber,
     Crux,
     Evidence,
+    Feedback,
     Intake,
     Node,
     Position,
@@ -52,7 +53,7 @@ def _aware(dt: datetime | None) -> datetime | None:
 def purge_chamber(db: Session, ch: Chamber):
     from .protocol import emit
 
-    for model in (Intake, Node, Restatement, Crux, UnderstandingMap, PreRoundTurn, Prediction, Steelman, QuizAnswer, QuizItem, Evidence):
+    for model in (Intake, Node, Restatement, Crux, UnderstandingMap, PreRoundTurn, Prediction, Steelman, QuizAnswer, QuizItem, Evidence, Feedback):
         for row in db.scalars(select(model).where(model.chamber_id == ch.id)):
             db.delete(row)
     # Chamber-scoped Delegate memory and suggestions nobody acted on

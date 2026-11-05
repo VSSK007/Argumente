@@ -33,7 +33,10 @@ Then restart. If a Claude call fails (bad key, network, refusal), that step fall
 docker compose up --build        # http://localhost:3000 · API on :8000 · Postgres in a volume
 ```
 
-Put `ANTHROPIC_API_KEY=...` in a `.env` file next to `docker-compose.yml` to use Claude. Behind a TLS-inspecting corporate proxy, build with your CA: `docker compose build --secret id=ca,src=/path/to/ca.crt` (or `docker build --secret …` per image). The web image downloads its fonts at build time, so the build needs to reach Google Fonts. Users' browsers never do.
+Put `ANTHROPIC_API_KEY=...` in a `.env` file next to `docker-compose.yml` to use Claude. Behind a TLS-inspecting corporate proxy, build with your CA: `docker compose build --secret id=ca,src=/path/to/ca.crt` (or `docker build --secret …` per image). The web image downloads its fonts at build time, so the build needs to reach Google Fonts. Users' browsers never do. The web container finds the API through `API_URL` at runtime.
+
+### Deploying
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): settings, a Render blueprint (`render.yaml`), Fly configs, a pre-launch checklist and backups. The Render and Fly files are untested against real accounts.
 
 ### Signing in
 Real sign-in: **magic links** (a single-use link, valid 15 minutes, token kept in the URL fragment so it never reaches server logs) and **passkeys** (add one from Me). Without `SMTP_HOST` set, links are printed to the API log; with `ARGUMENTE_DEV=1` (what `scripts/dev.sh` sets) the sign-in page also offers the link directly and a developer quick-switch panel. **Dev sign-in is off unless `ARGUMENTE_DEV=1`**, so deployments are secure by default. Sessions last 30 days; "Sign out on every device" is on Me. See `services/api/.env.example` for SMTP, `WEB_ORIGIN` and `WEBAUTHN_RP_ID`.
@@ -69,6 +72,9 @@ With `scripts/dev.sh`, the developer sign-in panel switches accounts instantly. 
 | Evidence board | For factual and predictive differences and cruxes, people add sources side by side (supports / challenges / context). |
 | **Position Record** | Note when a conversation changed your mind. Private by default; opt in to show public entries, steelmen accepted and prediction calibration on your Delegate's profile (never which Chamber). |
 | **Public topics** | Polis-style: anyone signed in starts a question, adds short statements and votes agree / disagree / pass. An opinion landscape (PCA + k-means, pure Python) shows opinion groups, what makes each distinct, common ground across all groups and what divides them. Votes and authors are anonymous; groups appear only when every group has 3+ people. Only people vote, never Delegates. Any divisive statement can be taken into a private Chamber. Safety screening, reporting, creator moderation, rate limits. |
+| **Notifications** | A bell and an Inbox tell you when it's your turn (Mediator read everyone, Map ready, options to rank, item to approve, someone paused…). Nudges are generic: they name the Chamber and what to do, never anyone's words, and a quiet safety pause notifies nobody. Optional email (needs SMTP): at most one per 30 minutes, opt out in the Inbox. |
+| **Feedback + metrics** | At close, two quick questions ("Was this useful?", "Do you understand them better?") with an optional note that is labelled as shared with the team. Moderators get aggregate metrics: funnel from created → closed, restatements accepted first try, average Understanding Score before/after, feedback. No content. |
+| Legal + hardening | Plain-language `/privacy` and `/terms` drafts (need lawyer review and an operator name), security headers (CSP, HSTS, no framing), runtime API proxy so one web image works anywhere, `scripts/backup.sh`. |
 | Delegate Mandate | `GET /api/v1/delegates/{handle}/mandate`: an Ed25519-signed statement of what a Delegate may assert and commit to (never commitments, third person only), verifiable with `/.well-known/argumente-keys.json`. Spec: [docs/DELEGATE_MANDATE.md](docs/DELEGATE_MANDATE.md). |
 | Design gallery | `/design` shows every component with fixed sample data. It's also the reference page for screenshot comparisons. |
 | Pause | Anyone can pause at any time. In-flight Mediator runs stop. Only the pauser can resume. |
@@ -84,7 +90,7 @@ With `scripts/dev.sh`, the developer sign-in panel switches accounts instantly. 
 ## Tests
 
 ```bash
-cd services/api && uv run pytest          # 42 API tests incl. the safety invariants and the eval gate
+cd services/api && uv run pytest          # 47 API tests incl. the safety invariants and the eval gate
 TEST_DATABASE_URL=postgresql+psycopg://user@host/db uv run pytest   # same suite on Postgres
 cd e2e && npm install && npx playwright install chromium   # once
 node e2e/flow.cjs                          # browser E2E: full two-person loop (needs both servers running)
@@ -94,6 +100,7 @@ node e2e/features.cjs                      # browser E2E: tabs, private ranking,
 node e2e/understanding.cjs                 # browser E2E: landing demo, Steelman Exchange, what-if, evidence, Position Record
 node e2e/topics.cjs                        # browser E2E: public topic, voting, opinion groups, divisive statement → Chamber
 node e2e/auth.cjs                          # browser E2E: magic link, passkey (virtual authenticator), moderation queue
+node e2e/ops.cjs                           # browser E2E: notifications, feedback, metrics, legal pages, security headers
 node e2e/quality.cjs                       # accessibility (axe, WCAG 2.2 AA) on every page + /design screenshot comparison
 PERF_BUDGET=1 node e2e/quality.cjs         # …plus a 350 KB JavaScript budget (run against a production build)
 cd services/api && uv run python ../../evals/run.py   # Mediator eval → evals/REPORT.md

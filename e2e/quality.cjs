@@ -105,6 +105,8 @@ async function visual(page, name) {
     ["public map", `/m/${slug}`, "Where each person stands"],
     ["commons", "/commons", "Commons"],
     ["topics", "/topics", "Where does everyone actually stand?"],
+    ["privacy", "/privacy", "Who can see what"],
+    ["terms", "/terms", "How to behave"],
     ["design", "/design", "Argumenté components"],
   ]) {
     await anon.goto(BASE + url);
@@ -122,6 +124,7 @@ async function visual(page, name) {
     ["today", "/", "Hello, Quinn."],
     ["me", "/me", "Memory Inspector"],
     ["spar", "/spar", "Start sparring"],
+    ["inbox", "/inbox", "What needs you"],
     ["profile", `/d/${d.handle}`, "Delegate of Quinn"],
     ["new chamber", "/chambers/new", "Create Chamber"],
     ["chamber · now", `/chambers/${ch.id}`, "The Understanding Map is ready"],

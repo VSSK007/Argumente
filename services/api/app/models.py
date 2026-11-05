@@ -24,6 +24,7 @@ class User(Base):
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_admin: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
     webauthn_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # opaque user handle for passkeys
+    notify_email: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=True)  # None counts as on
     delegate: Mapped[Optional["Delegate"]] = relationship(
         back_populates="owner", uselist=False, cascade="all, delete-orphan", passive_deletes=True
     )
@@ -483,5 +484,35 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String)
     target_type: Mapped[str] = mapped_column(String)
     target_id: Mapped[str] = mapped_column(String)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Notification(Base):
+    """In-app (and optionally emailed) nudge. Text is generic by design: never any private content."""
+
+    __tablename__ = "notifications"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_id("ntf"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    chamber_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    kind: Mapped[str] = mapped_column(String)
+    title: Mapped[str] = mapped_column(String)
+    body: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    emailed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Feedback(Base):
+    """'Was this useful?' at close. The note is shared with the Argumenté team, and the UI says so."""
+
+    __tablename__ = "feedback"
+    __table_args__ = (UniqueConstraint("chamber_id", "user_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber_id: Mapped[str] = mapped_column(ForeignKey("chambers.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    useful: Mapped[int] = mapped_column(Integer)  # 1-5
+    understood: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # "Do you understand them better?"
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

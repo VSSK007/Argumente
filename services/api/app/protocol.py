@@ -69,6 +69,9 @@ def public_positions(db: Session, delegate_id: str) -> list[Position]:
 
 def emit(db: Session, chamber_id: str, type_: str, actor_type: str, actor_id: str | None = None, **payload):
     db.add(ChamberEvent(chamber_id=chamber_id, type=type_, actor_type=actor_type, actor_id=actor_id, payload=payload))
+    from . import notify
+
+    notify.dispatch(db, chamber_id, type_, actor_type, actor_id, payload)
 
 
 def members(db: Session, chamber: Chamber) -> list[Membership]:

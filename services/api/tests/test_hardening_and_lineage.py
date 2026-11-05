@@ -70,3 +70,12 @@ def test_revisit_links_outcome_for_previous_members_only(make_user):
     assert c.get(f"/chambers/{new['id']}").json()["lineage"]["parent"] is None
     # Open Chambers can't be revisited
     assert a.post(f"/chambers/{new['id']}/revisit").status_code == 409
+
+
+def test_database_url_normalised_for_hosts():
+    from app.db import normalize_url
+
+    assert normalize_url("postgres://u:p@h:5432/d") == "postgresql+psycopg://u:p@h:5432/d"
+    assert normalize_url("postgresql://u@h/d?sslmode=require") == "postgresql+psycopg://u@h/d?sslmode=require"
+    assert normalize_url("postgresql+psycopg://u@h/d") == "postgresql+psycopg://u@h/d"
+    assert normalize_url("sqlite:///x.db") == "sqlite:///x.db"

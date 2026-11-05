@@ -4,15 +4,16 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import retention
+from . import notify, retention
 from .db import ensure_schema
-from .routers import admin, auth, chambers, delegates, public, spar, topics, understanding
+from .routers import admin, auth, chambers, insights, notifications, delegates, public, spar, topics, understanding
 
 logging.basicConfig(level=logging.INFO)
 
 ensure_schema()
 if os.environ.get("ENGINE_SYNC") != "1":
     retention.start_worker()
+    notify.start_worker()
 
 app = FastAPI(title="Argumenté API", version="0.1.0", description="Local MVP. See docs/SYSTEM_ARCHITECTURE.md.")
 app.add_middleware(
@@ -22,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth.router, delegates.router, chambers.router, spar.router, public.router, understanding.router, topics.router, admin.router):
+for r in (auth.router, delegates.router, chambers.router, spar.router, public.router, understanding.router, topics.router, admin.router, notifications.router, insights.router):
     app.include_router(r, prefix="/api/v1")
 
 

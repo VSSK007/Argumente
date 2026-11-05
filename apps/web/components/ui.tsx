@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { api, getToken, setToken, useMe } from "@/lib/api";
+import { api, getToken, setToken, useMe, usePoll } from "@/lib/api";
 
 /* ------------------------------------------------------------------ primitives */
 
@@ -284,11 +284,26 @@ const NAV = [
   { href: "/me", label: "Me" },
 ];
 
+function Bell() {
+  const { data } = usePoll<{ unread: number }>("/notifications/unread", 20000);
+  const n = data?.unread ?? 0;
+  return (
+    <Link href="/inbox" className="relative rounded-md px-2 py-1 hover:bg-paper-2" aria-label={n ? `Inbox, ${n} unread` : "Inbox"}>
+      <span aria-hidden>🔔</span>
+      {n ? (
+        <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-crux px-1 text-center font-mono text-[10px] leading-[18px] text-white" aria-hidden>
+          {n > 9 ? "9+" : n}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { me } = useMe();
-  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/auth/") || path.startsWith("/commons") || path.startsWith("/design") || (path.startsWith("/topics") && path !== "/topics/new");
+  const isPublic = path === "/" || path.startsWith("/m/") || path.startsWith("/login") || path.startsWith("/auth/") || path.startsWith("/commons") || path.startsWith("/design") || path === "/privacy" || path === "/terms" || (path.startsWith("/topics") && path !== "/topics/new");
 
   useEffect(() => {
     // Only redirect when there is genuinely no session: a token whose /me check is still in flight is not "signed out".
@@ -326,6 +341,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 text-sm">
             {me ? (
               <>
+                <Bell />
                 <span className="hidden text-ink-2 sm:inline">{me.name}</span>
                 <button
                   className="rounded-md px-2 py-1 text-ink-2 hover:bg-paper-2 hover:text-ink"
@@ -347,6 +363,9 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      <footer className="mx-auto max-w-5xl px-4 pb-24 pt-4 text-xs text-ink-2 print:hidden md:pb-8">
+        <Link href="/privacy" className="underline">Privacy</Link> · <Link href="/terms" className="underline">Terms</Link> · AI can be wrong; this isn’t therapy or advice.
+      </footer>
       {me ? (
         <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t hairline bg-paper md:hidden print:hidden">
           {NAV.map((n) => (

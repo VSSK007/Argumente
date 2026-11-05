@@ -29,6 +29,7 @@
 | D23 | Delegate pre-round (C1) only if the core loop is solid by H48 | **Accepted** | Protects the critical path | Yes |
 | D25 | Public topics (Polis-style) built at the founder's request, ahead of the 'learn from 20 Chambers first' sequence in D18. Anonymous votes, groups shown only at 3+ people, humans-only voting, safety screen + reporting + creator moderation. | **Accepted** | Founder's call; makes the public layer demonstrable. Open: moderation at scale, sybil resistance (dev login allows unlimited accounts), whether topics should require verified accounts before launch. | Yes |
 | D26 | Real sign-in: magic links + passkeys; dev sign-in off unless ARGUMENTE_DEV=1. Moderation queue for public content with audit log and auto-hide at 3 reports. | **Accepted** | Prerequisite for any non-local use. Open: email provider choice, whether topic voting should require a passkey or extra verification against multi-account voting. | Yes |
+| D27 | Notifications are generic and email is opt-out; feedback notes are explicitly shared with the team; metrics are aggregate-only and visible to moderators. A static CSP with inline scripts allowed is accepted for now (nonce CSP deferred). | **Accepted** | Needed to learn from the first Chambers without exposing content. | Yes |
 | D24 | Expenses deferred to v1. MVP Agreements are text items with per-person approval. | **Accepted** | Focus | Yes |
 
 ## 2. Critical product decisions needing the founder

@@ -9,9 +9,7 @@ RUN --mount=type=secret,id=ca,required=false \
 
 FROM node:22-alpine AS build
 WORKDIR /app
-# Rewrites (/api/v1 -> API) are resolved at build time, so the API address is a build argument.
-ARG API_URL=http://api:8000
-ENV API_URL=$API_URL NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # next/font downloads the fonts at build time and self-hosts them.
@@ -21,7 +19,8 @@ RUN --mount=type=secret,id=ca,required=false \
 
 FROM node:22-alpine
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+# The API address is read at runtime (proxy.ts), so one image works anywhere.
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 API_URL=http://api:8000
 COPY --from=build /app ./
 USER node
 EXPOSE 3000

@@ -19,6 +19,7 @@ export default function Admin() {
   const { me } = useMe();
   const [status, setStatus] = useState("OPEN");
   const { data, reload, error } = usePoll<any[]>(me?.is_admin ? `/admin/reports?status=${status}` : null, 0);
+  const { data: metrics } = usePoll<any>(me?.is_admin ? "/admin/metrics" : null, 0);
   const { data: audit, reload: reloadAudit } = usePoll<any[]>(me?.is_admin ? "/admin/audit" : null, 0);
   if (me && !me.is_admin) return <p className="text-ink-2">Moderators only. Moderators are set with the ADMIN_EMAILS setting on the API.</p>;
   return (
@@ -31,6 +32,7 @@ export default function Admin() {
           alone. Every action is recorded in the audit log. Statements reported by three different people are hidden automatically until reviewed.
         </p>
       </div>
+      {metrics ? <Metrics m={metrics} /> : null}
       <div className="flex gap-2" role="tablist">
         {["OPEN", "RESOLVED", "DISMISSED", "ALL"].map((s) => (
           <button key={s} role="tab" aria-selected={status === s} onClick={() => setStatus(s)} className={`rounded-full px-3 py-1 text-sm ${status === s ? "bg-ink text-paper" : "border hairline"}`}>
@@ -123,5 +125,53 @@ function ReportCard({ r, onDone }: { r: any; onDone: () => void }) {
       )}
       <ErrorNote error={error} />
     </Card>
+  );
+}
+
+const pct = (v: number | null | undefined) => (v === null || v === undefined ? "–" : `${Math.round(v * 100)}%`);
+
+function Metrics({ m }: { m: any }) {
+  const top = m.funnel[0]?.n || 1;
+  return (
+    <section>
+      <SectionTitle kicker="Is it working?">Metrics (aggregates only)</SectionTitle>
+      <div className="grid gap-3 md:grid-cols-4">
+        {[
+          ["People", `${m.users.total}`, `${m.users.verified} verified`],
+          ["Chambers", `${m.chambers.total}`, `typical size ${m.chambers.median_people ?? "–"}`],
+          ["Understanding Score", m.understanding_score.avg_before === null ? "–" : `${pct(m.understanding_score.avg_before)} → ${pct(m.understanding_score.avg_after)}`, `${m.understanding_score.chambers_measured} measured`],
+          ["Useful (1–5)", m.feedback.avg_useful ?? "–", `${m.feedback.responses} responses · ${pct(m.feedback.understand_better)} understand better`],
+        ].map(([t, v, sub]) => (
+          <Card key={t as string} className="p-4">
+            <div className="label-mono text-ink-2">{t}</div>
+            <div className="font-display text-3xl">{v}</div>
+            <div className="text-xs text-ink-2">{sub}</div>
+          </Card>
+        ))}
+      </div>
+      <Card className="mt-3 p-4">
+        <div className="label-mono text-ink-2">Where Chambers drop off</div>
+        <ul className="mt-2 space-y-2">
+          {m.funnel.map((f: any) => (
+            <li key={f.step} className="text-sm">
+              <div className="flex justify-between"><span>{f.step}</span><span className="font-mono text-xs">{f.n}</span></div>
+              <div className="mt-0.5 h-2 rounded-full bg-paper-2"><div className="h-2 rounded-full bg-ink" style={{ width: `${Math.round((f.n / top) * 100)}%` }} /></div>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-ink-2">
+          Restatements accepted first try: {pct(m.restatements.accepted_first_try)} · needed a revision: {pct(m.restatements.needed_revision)} · closed:
+          {" "}{m.chambers.closed_agreed} agreed, {m.chambers.closed_understood} understood-still-disagree, {m.chambers.closed_abandoned} abandoned · public topics: {m.topics.total} ({m.topics.votes} votes)
+        </p>
+      </Card>
+      {m.feedback.notes.length ? (
+        <Card className="mt-3 p-4">
+          <div className="label-mono text-ink-2">Feedback notes (written knowing the team reads them)</div>
+          <ul className="mt-2 space-y-1 text-sm">
+            {m.feedback.notes.map((n: any, i: number) => (<li key={i}><span className="font-mono text-xs text-ink-2">{n.useful}/5</span> {n.note}</li>))}
+          </ul>
+        </Card>
+      ) : null}
+    </section>
   );
 }
