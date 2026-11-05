@@ -1,0 +1,19 @@
+{
+  "id": "remote_work",
+  "question": "Should our team go back to the office three days a week?",
+  "parties": [
+    {
+      "label": "Kai",
+      "text": "Office days will improve collaboration because people solve problems faster face to face."
+    },
+    {
+      "label": "Rin",
+      "text": "My commute is 90 minutes each way. I'm more productive at home, and the data from our last quarter shows output went up."
+    }
+  ],
+  "expected_types": [
+    "PREDICTION",
+    "FACT",
+    "INTEREST"
+  ]
+}

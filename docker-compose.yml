@@ -1,0 +1,56 @@
+# Full local stack on Postgres: docker compose up --build  ->  http://localhost:3000
+# Optional: put ANTHROPIC_API_KEY=... in a .env file next to this one to use Claude.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: argumente
+      POSTGRES_PASSWORD: argumente
+      POSTGRES_DB: argumente
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argumente"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: argumente-api
+    build: ./services/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://argumente:argumente@db:5432/argumente
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ENGINE_ANALYZE_MODEL: ${ENGINE_ANALYZE_MODEL:-claude-sonnet-5-5}
+      ENGINE_FAST_MODEL: ${ENGINE_FAST_MODEL:-claude-haiku-5-5}
+      ARGUMENTE_SECRET: ${ARGUMENTE_SECRET:-change-me-in-production}
+      # Sign-in: magic links are emailed via SMTP when SMTP_HOST is set, otherwise printed in this service's log.
+      ARGUMENTE_DEV: ${ARGUMENTE_DEV:-0}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Argumenté <no-reply@localhost>}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    image: argumente-web
+    build:
+      context: ./apps/web
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

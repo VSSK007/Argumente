@@ -1,0 +1,18 @@
+{
+  "id": "guests_policy",
+  "question": "How often can partners stay over in the flat?",
+  "parties": [
+    {
+      "label": "Jess",
+      "text": "Partners staying three nights a week is basically an extra flatmate who doesn't pay rent."
+    },
+    {
+      "label": "Nico",
+      "text": "It feels controlling to put a number on it. I respect the space and clean up after us."
+    }
+  ],
+  "expected_types": [
+    "INTERPRETATION",
+    "VALUE"
+  ]
+}

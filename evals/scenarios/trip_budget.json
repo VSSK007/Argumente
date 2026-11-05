@@ -1,0 +1,18 @@
+{
+  "id": "trip_budget",
+  "question": "Where should we go in March, and what's our budget?",
+  "parties": [
+    {
+      "label": "Priya",
+      "text": "We should go to Lisbon because it's sunny and cheap in March. I want to rest, not rush between sights."
+    },
+    {
+      "label": "Sam",
+      "text": "My budget is 600 euros max because I'm saving for a deposit. I'd like somewhere new to explore since we always go to the same kind of place."
+    }
+  ],
+  "expected_types": [
+    "VALUE",
+    "INTEREST"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "family_holidays",
+  "question": "Where should the family spend the holidays this year?",
+  "parties": [
+    {
+      "label": "Maria",
+      "text": "We should host at our place because Mum can't travel easily anymore."
+    },
+    {
+      "label": "Jon",
+      "text": "We hosted last year. It's our turn to rest, and I'm worried we'll burn out if we host again."
+    },
+    {
+      "label": "Eve",
+      "text": "I'd like us to rotate fairly. Whoever hosts should get help with the cooking."
+    }
+  ],
+  "expected_types": [
+    "INTEREST",
+    "VALUE",
+    "PREDICTION"
+  ]
+}

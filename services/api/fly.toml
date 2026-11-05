@@ -1,0 +1,24 @@
+# Fly.io. Run from this directory (it is the Docker build context): fly launch --copy-config --no-deploy
+# (NOT yet run against a real Fly account.) Then: fly postgres attach (sets DATABASE_URL), fly secrets set ..., fly deploy. See docs/DEPLOYMENT.md.
+app = "argumente-api"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ARGUMENTE_DEV = "0"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "20s"

@@ -1,0 +1,17 @@
+{
+  "id": "rent_by_room",
+  "question": "Should rent be split by room size?",
+  "parties": [
+    {
+      "label": "Ana",
+      "text": "Rent should be split by room size because I have the smallest room and pay the same as everyone."
+    },
+    {
+      "label": "Tom",
+      "text": "Equal rent is fair because we all share the kitchen and living room equally, and the big room was a first-come choice."
+    }
+  ],
+  "expected_types": [
+    "VALUE"
+  ]
+}

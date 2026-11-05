@@ -47,9 +47,9 @@ Paper-and-ink base. Restrained, no gradient washes.
 | `rule` | #D9D3C7 | #2C2C2C | hairlines |
 | `human` | ink, solid | | Human-authored content: solid ink, no tint |
 | `delegate` | #3B5BDB at 8% tint + 2px left rule | | Delegate content |
-| `engine` | #8A6D3B (ochre) | | Mediator/engine content: italic serif |
+| `engine` | #7A5F30 (ochre; darkened from #8A6D3B for WCAG AA) | | Mediator/engine content: italic serif |
 | `crux` | #C2410C (vermilion) | | Crux markers only. Scarcity gives it meaning. |
-| `agree` | #2F7D5B | | Shared ground |
+| `agree` | #27694B | | Shared ground |
 
 Party colors in a Chamber come from a muted categorical set (slate, plum, teal, sand, moss). They identify, they don't rank, and they're never red versus green.
 

@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f7f4ee;
+  --color-paper-2: #efeae0;
+  --color-ink: #1a1a1a;
+  --color-ink-2: #55524c;
+  --color-rule: #d9d3c7;
+  --color-delegate: #3b5bdb;
+  --color-delegate-tint: #e9edfb;
+  --color-engine: #7a5f30;
+  --color-engine-tint: #f3ece0;
+  --color-crux: #c2410c;
+  --color-agree: #27694b;
+  --color-agree-tint: #e6f1eb;
+  --font-display: var(--font-fraunces), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-body: var(--font-source-serif), "Iowan Old Style", Georgia, serif;
+  --font-ui: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-delegate: 0.625rem;
+}
+
+html, body { background: var(--color-paper); color: var(--color-ink); }
+body { font-family: var(--font-ui); -webkit-font-smoothing: antialiased; }
+.font-display { font-family: var(--font-display); font-optical-sizing: auto; }
+.font-body { font-family: var(--font-body); }
+.font-mono { font-family: var(--font-mono); }
+.prose-body { font-family: var(--font-body); font-size: 1.0625rem; line-height: 1.6; }
+.label-mono {
+  font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hairline { border-color: var(--color-rule); }
+::selection { background: #e9edfb; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@keyframes pulse-dot { 0%, 100% { opacity: 0.25 } 50% { opacity: 1 } }
+.thinking-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@keyframes demo-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+.demo-in { animation: demo-in 0.5s ease-out both; }
+.demo-in:nth-child(2) { animation-delay: 0.6s } .demo-in:nth-child(3) { animation-delay: 1.4s }
+.demo-in:nth-child(4) { animation-delay: 2.2s } .demo-in:nth-child(5) { animation-delay: 3s }
+@keyframes demo-progress { from { width: 0 } to { width: 100% } }
+.demo-progress { animation: demo-progress linear both; }
+
+@media print {
+  html, body { background: #fff; }
+  button { display: none !important; }
+  details > *:not(summary) { display: block; }
+}
